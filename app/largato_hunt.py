@@ -22,7 +22,7 @@ def get_press_key_function():
                 key_map = {
                     'up': 0x26, 'down': 0x28, 'left': 0x25, 'right': 0x27,
                     'x': 0x58, 'space': 0x20, 'enter': 0x0D, 'f1': 0x70,
-                    'f2': 0x71, 'f3': 0x72, 'f4': 0x73, 'f5': 0x74
+                    'f2': 0x71, 'f3': 0x72, 'f4': 0x73, 'f5': 0x74, 'f6': 0x75
                 }
                 
                 if isinstance(key, str):
@@ -52,6 +52,33 @@ def get_press_key_function():
 
 press_key = get_press_key_function()
 
+def get_press_right_mouse_function():
+    try:
+        from app.windows_utils.mouse import press_right_mouse
+        return press_right_mouse
+    except ImportError:
+        try:
+            from app.window_utils import press_right_mouse
+            return press_right_mouse
+        except ImportError:
+            import ctypes
+            def press_right_mouse(hwnd=None, target_x=None, target_y=None):
+                try:
+                    MOUSEEVENTF_RIGHTDOWN = 0x0008
+                    MOUSEEVENTF_RIGHTUP = 0x0010
+                    
+                    ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
+                    time.sleep(0.1)
+                    ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+                    
+                    return True
+                except Exception as e:
+                    logger.error(f"Error with right click: {e}")
+                    return False
+            return press_right_mouse
+
+press_right_mouse = get_press_right_mouse_function()
+
 class AdvancedSkillDetector:
     def __init__(self):
         self.logger = logging.getLogger('PristonBot')
@@ -59,7 +86,7 @@ class AdvancedSkillDetector:
         self.previous_images = []
         self.max_history = 10
         self.stable_start_time = None
-        self.required_stable_seconds = 3.0
+        self.required_stable_seconds = 1.0
         self.change_threshold = 0.02
         self.samples_since_change = 0
         self.min_samples_for_stability = 8
@@ -313,40 +340,110 @@ class LargatoHunter:
                 
                 if self.hunt_phase == "initial":
                     if phase_elapsed >= 3.0:
-                        self.log_callback("Initial preparation complete, selecting main skill...")
-                        press_key(None, 'f1')
-                        time.sleep(0.3)
-                        self.log_callback("Moving right to locate wood stacks...")
-                        self.hunt_phase = "moving_right"
+                        if self.current_round == 1:
+                            self.log_callback("Round 1 preparation: casting F5 skills...")
+                            self.hunt_phase = "round1_f5_cast1"
+                        else:
+                            self.log_callback("Initial preparation complete, selecting main skill...")
+                            press_key(None, 'f1')
+                            time.sleep(0.3)
+                            self.log_callback("Moving right to locate wood stacks...")
+                            self.hunt_phase = "moving_right"
                         self.phase_start_time = current_time
                     else:
                         time.sleep(0.1)
                 
+                elif self.hunt_phase == "round1_f5_cast1":
+                    press_key(None, 'f5')
+                    time.sleep(0.1)
+                    press_right_mouse()
+                    time.sleep(0.1)
+                    press_right_mouse()
+                    self.log_callback("First F5 cast complete, waiting...")
+                    self.hunt_phase = "round1_wait1"
+                    self.phase_start_time = current_time
+                
+                elif self.hunt_phase == "round1_wait1":
+                    if phase_elapsed >= 1.5:
+                        self.log_callback("Casting F6 skills...")
+                        self.hunt_phase = "round1_f6_cast1"
+                        self.phase_start_time = current_time
+                
+                elif self.hunt_phase == "round1_f6_cast1":
+                    press_key(None, 'f6')
+                    time.sleep(0.1)
+                    press_right_mouse()
+                    time.sleep(0.1)
+                    press_right_mouse()
+                    self.log_callback("First F6 cast complete, waiting...")
+                    self.hunt_phase = "round1_wait2"
+                    self.phase_start_time = current_time
+                
+                elif self.hunt_phase == "round1_wait2":
+                    if phase_elapsed >= 1.5:
+                        self.log_callback("Casting second F6 skills...")
+                        self.hunt_phase = "round1_f6_cast2"
+                        self.phase_start_time = current_time
+                
+                elif self.hunt_phase == "round1_f6_cast2":
+                    press_key(None, 'f6')
+                    time.sleep(0.1)
+                    press_right_mouse()
+                    time.sleep(0.1)
+                    press_right_mouse()
+                    self.log_callback("Second F6 cast complete, waiting...")
+                    self.hunt_phase = "round1_wait3"
+                    self.phase_start_time = current_time
+                
+                elif self.hunt_phase == "round1_wait3":
+                    if phase_elapsed >= 1.5:
+                        self.log_callback("Selecting main skill for Round 1...")
+                        press_key(None, 'f1')
+                        time.sleep(0.3)
+                        self.log_callback("Moving left to position for attack...")
+                        self.hunt_phase = "round1_moving_left"
+                        self.phase_start_time = current_time
+                
+                elif self.hunt_phase == "round1_moving_left":
+                    if phase_elapsed < 0.4:
+                        press_key(None, 'left')
+                        time.sleep(0.1)
+                    else:
+                        self.log_callback("Round 1 positioning complete, beginning attack sequence...")
+                        self.hunt_phase = "attacking"
+                        self.phase_start_time = current_time
+                        self.skill_detector.reset_for_new_round()
+                
                 elif self.hunt_phase == "moving_right":
-                    if self.current_round == 1:
-                        movement_duration = 3.0
-                    elif self.current_round == 2:
-                        movement_duration = 16.0
+                    if self.current_round == 2:
+                        movement_duration = 20.0
                     elif self.current_round == 3:
                         movement_duration = 7.0
                     else:  # round 4
                         movement_duration = 14.0
                     
                     if phase_elapsed < movement_duration:
-                        if self.current_round == 1:
-                            press_key(None, 'right')
-                            time.sleep(0.1)
+                        cycle_duration = 0.08
+                        current_cycle = int(phase_elapsed / cycle_duration) % 6
+                        
+                        if current_cycle == 0:
+                            press_key(None, 'up')
+                            press_key(None, 'up')
+                        elif current_cycle == 1:
+                            pass
+                        elif current_cycle == 2:
+                            press_key(None, 'down')
+                            press_key(None, 'down')
+                        elif current_cycle == 3:
+                            pass
+                        elif current_cycle == 4:
+                            press_key(None, 'up')
                         else:
-                            current_cycle = int(phase_elapsed / 0.2) % 2
-                            
-                            if current_cycle == 0:
-                                press_key(None, 'up')
-                            else:
-                                press_key(None, 'down')
-                            
-                            time.sleep(0.02)
-                            press_key(None, 'right')
-                            time.sleep(0.03)
+                            pass
+                        
+                        time.sleep(0.01)
+                        press_key(None, 'right')
+                        time.sleep(0.01)
                     else:
                         self.log_callback("Right movement complete, positioning for attack...")
                         self.hunt_phase = "moving_left"
@@ -387,19 +484,30 @@ class LargatoHunter:
                         self.logger.warning("Could not capture skill bar image during monitoring")
                 
                 elif self.hunt_phase == "round_complete":
-                    movement_duration = 5.0 if self.current_round == 1 else 5.0
+                    movement_duration = 5.0
                     
                     if phase_elapsed < movement_duration:
-                        current_cycle = int(phase_elapsed / 0.2) % 2
+                        cycle_duration = 0.08
+                        current_cycle = int(phase_elapsed / cycle_duration) % 6
                         
                         if current_cycle == 0:
                             press_key(None, 'up')
-                        else:
+                            press_key(None, 'up')
+                        elif current_cycle == 1:
+                            pass
+                        elif current_cycle == 2:
                             press_key(None, 'down')
+                            press_key(None, 'down')
+                        elif current_cycle == 3:
+                            pass
+                        elif current_cycle == 4:
+                            press_key(None, 'up')
+                        else:
+                            pass
                         
-                        time.sleep(0.02)
+                        time.sleep(0.01)
                         press_key(None, 'right')
-                        time.sleep(0.03)
+                        time.sleep(0.01)
                     else:
                         self.current_round += 1
                         self.log_callback(f"Advancing to Round {self.current_round}...")
