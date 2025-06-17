@@ -1,9 +1,3 @@
-"""
-Simple Largato Hunt Module with Image Comparison Logic
------------------------------------------------------
-Uses simple image comparison to detect when skill is stable (round finished).
-"""
-
 import time
 import logging
 import threading
@@ -58,22 +52,23 @@ def get_press_key_function():
 
 press_key = get_press_key_function()
 
-class SimpleSkillComparator:
+class AdvancedSkillDetector:
     def __init__(self):
         self.logger = logging.getLogger('PristonBot')
-        self.title = "Simple Skill Comparator"
-        self.last_image = None
+        self.title = "Advanced Skill Detector"
+        self.previous_images = []
+        self.max_history = 10
         self.stable_start_time = None
-        self.required_stable_seconds = 4.0
-        self.similarity_threshold = 0.90
+        self.required_stable_seconds = 3.0
+        self.change_threshold = 0.02
+        self.samples_since_change = 0
+        self.min_samples_for_stability = 8
         
-        # Create debug directory
         self.debug_dir = "debug_images"
         if not os.path.exists(self.debug_dir):
             os.makedirs(self.debug_dir)
     
     def save_debug_image(self, image, filename):
-        """Save image for debugging purposes"""
         try:
             if isinstance(image, np.ndarray):
                 cv2.imwrite(os.path.join(self.debug_dir, filename), image)
@@ -83,97 +78,114 @@ class SimpleSkillComparator:
         except Exception as e:
             self.logger.error(f"Error saving debug image: {e}")
     
-    def images_are_similar(self, img1, img2):
-        """Simple image comparison using mean squared error"""
-        try:
-            # Convert PIL images to numpy arrays if needed
-            if hasattr(img1, 'size'):
-                img1 = np.array(img1)
-            if hasattr(img2, 'size'):
-                img2 = np.array(img2)
-            
-            # Ensure images are the same size
-            if img1.shape != img2.shape:
-                img2 = cv2.resize(img2, (img1.shape[1], img1.shape[0]))
-            
-            # Convert to grayscale for comparison
-            if len(img1.shape) == 3:
-                gray1 = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
-            else:
-                gray1 = img1
-                
-            if len(img2.shape) == 3:
-                gray2 = cv2.cvtColor(img2, cv2.COLOR_RGB2GRAY)
-            else:
-                gray2 = img2
-            
-            # Calculate mean squared error
-            mse = np.mean((gray1.astype(float) - gray2.astype(float)) ** 2)
-            
-            # Convert to similarity score (0-1, where 1 is identical)
-            max_pixel_value = 255.0
-            similarity = 1.0 - (mse / (max_pixel_value ** 2))
-            similarity = max(0.0, similarity)
-            
-            self.logger.debug(f"Image similarity: {similarity:.3f} (threshold: {self.similarity_threshold})")
-            
-            return similarity >= self.similarity_threshold
-            
-        except Exception as e:
-            self.logger.error(f"Error comparing images: {e}")
-            return False
+    def extract_skill_core(self, image):
+        if hasattr(image, 'size'):
+            image = np.array(image)
+        
+        height, width = image.shape[:2]
+        
+        center_y = height // 2
+        center_x = width // 2
+        
+        core_height = max(4, height // 3)
+        core_width = max(4, width // 2)
+        
+        y1 = max(0, center_y - core_height // 2)
+        y2 = min(height, center_y + core_height // 2)
+        x1 = max(0, center_x - core_width // 2)
+        x2 = min(width, center_x + core_width // 2)
+        
+        core_region = image[y1:y2, x1:x2]
+        
+        if len(core_region.shape) == 3:
+            core_region = cv2.cvtColor(core_region, cv2.COLOR_RGB2GRAY)
+        
+        return core_region
     
-    def check_skill_stability(self, current_image):
-        """Check if the skill has been stable for required time"""
+    def calculate_image_variance(self, image):
+        try:
+            core = self.extract_skill_core(image)
+            
+            mean_value = np.mean(core)
+            variance = np.var(core)
+            
+            histogram = cv2.calcHist([core], [0], None, [16], [0, 256])
+            hist_variance = np.var(histogram)
+            
+            combined_variance = variance + (hist_variance * 0.1)
+            
+            return combined_variance, mean_value
+        except Exception as e:
+            self.logger.error(f"Error calculating variance: {e}")
+            return 0.0, 0.0
+    
+    def detect_skill_change(self, current_image):
         try:
             current_time = time.time()
-            
-            # Save current image for debugging
             timestamp = int(current_time)
-            self.save_debug_image(current_image, f"skill_current_{timestamp}.png")
             
-            # If this is the first image, just store it
-            if self.last_image is None:
-                self.last_image = np.array(current_image)
-                self.stable_start_time = current_time
-                self.logger.debug("First skill image captured, starting stability check")
+            self.save_debug_image(current_image, f"skill_advanced_{timestamp}_{len(self.previous_images)}.png")
+            
+            current_variance, current_mean = self.calculate_image_variance(current_image)
+            
+            if len(self.previous_images) == 0:
+                self.previous_images.append((current_variance, current_mean, current_time))
+                self.logger.debug(f"First sample: variance={current_variance:.3f}, mean={current_mean:.1f}")
                 return False
             
-            # Compare with last image
-            if self.images_are_similar(current_image, self.last_image):
-                # Images are similar
-                if self.stable_start_time is None:
-                    self.stable_start_time = current_time
-                    self.logger.debug("Skill appears stable, starting timer")
-                
-                stable_duration = current_time - self.stable_start_time
-                self.logger.debug(f"Skill stable for {stable_duration:.1f}s / {self.required_stable_seconds}s")
-                
-                if stable_duration >= self.required_stable_seconds:
-                    self.logger.info(f"Skill has been stable for {stable_duration:.1f} seconds - Round complete!")
-                    return True
-            else:
-                # Images are different - skill is changing
-                if self.stable_start_time is not None:
-                    stable_duration = current_time - self.stable_start_time
-                    self.logger.debug(f"Skill changed after {stable_duration:.1f}s of stability")
-                
-                self.stable_start_time = None
-                self.logger.debug("Skill is changing, resetting stability timer")
+            if len(self.previous_images) < 3:
+                self.previous_images.append((current_variance, current_mean, current_time))
+                self.logger.debug(f"Collecting samples: {len(self.previous_images)}/3")
+                return False
             
-            # Update last image
-            self.last_image = np.array(current_image)
+            recent_variances = [v for v, m, t in self.previous_images[-3:]]
+            recent_means = [m for v, m, t in self.previous_images[-3:]]
+            
+            variance_change = abs(current_variance - np.mean(recent_variances)) / (np.mean(recent_variances) + 1)
+            mean_change = abs(current_mean - np.mean(recent_means)) / (np.mean(recent_means) + 1)
+            
+            total_change = variance_change + mean_change
+            
+            self.logger.debug(f"Variance: {current_variance:.3f}, Mean: {current_mean:.1f}, Change: {total_change:.4f}")
+            
+            if total_change > self.change_threshold:
+                self.samples_since_change = 0
+                self.stable_start_time = None
+                self.logger.debug(f"Significant change detected (change={total_change:.4f} > {self.change_threshold})")
+                change_detected = True
+            else:
+                self.samples_since_change += 1
+                
+                if self.stable_start_time is None and self.samples_since_change >= 3:
+                    self.stable_start_time = current_time
+                    self.logger.info("Skill appears stable, starting stability timer")
+                
+                change_detected = False
+            
+            self.previous_images.append((current_variance, current_mean, current_time))
+            
+            if len(self.previous_images) > self.max_history:
+                self.previous_images.pop(0)
+            
+            if self.stable_start_time is not None:
+                stable_duration = current_time - self.stable_start_time
+                self.logger.info(f"Skill stable for {stable_duration:.1f}s / {self.required_stable_seconds}s (samples: {self.samples_since_change})")
+                
+                if stable_duration >= self.required_stable_seconds and self.samples_since_change >= self.min_samples_for_stability:
+                    self.logger.info(f"ROUND COMPLETE! Stable for {stable_duration:.1f}s with {self.samples_since_change} stable samples")
+                    return True
+            
             return False
             
         except Exception as e:
-            self.logger.error(f"Error checking skill stability: {e}")
+            self.logger.error(f"Error in skill change detection: {e}")
             return False
     
-    def reset_stability_check(self):
-        """Reset the stability check for a new round"""
-        self.last_image = None
+    def reset_for_new_round(self):
+        self.previous_images = []
         self.stable_start_time = None
-        self.logger.debug("Reset skill stability check for new round")
+        self.samples_since_change = 0
+        self.logger.info("Reset advanced skill detector for new round")
 
 class LargatoHunter:
     def __init__(self, log_callback):
@@ -187,7 +199,7 @@ class LargatoHunter:
         self.current_round = 1
         self.hunt_start_time = None
         
-        self.skill_comparator = SimpleSkillComparator()
+        self.skill_detector = AdvancedSkillDetector()
         self.skill_bar_selector = None
         
         self.hunt_phase = "initial"
@@ -223,21 +235,18 @@ class LargatoHunter:
         return False
     
     def get_skill_percentage(self):
-        """Get skill percentage for UI display"""
         if not self.skill_bar_selector or not self.skill_bar_selector.is_setup():
             return 0
             
         try:
             skill_image = self.skill_bar_selector.get_current_screenshot_region()
             if skill_image:
-                # Simple percentage calculation for UI display
                 np_image = np.array(skill_image)
                 if np_image.size == 0:
                     return 0
                 
-                # Convert to grayscale and check how much is "active"
                 gray = cv2.cvtColor(np_image, cv2.COLOR_RGB2GRAY)
-                active_pixels = np.sum(gray > 100)  # Pixels that aren't dark
+                active_pixels = np.sum(gray > 100)
                 total_pixels = gray.size
                 
                 return (active_pixels / total_pixels) * 100 if total_pixels > 0 else 0
@@ -261,14 +270,14 @@ class LargatoHunter:
         self.hunt_start_time = time.time()
         self.hunt_phase = "initial"
         self.phase_start_time = time.time()
-        self.skill_comparator.reset_stability_check()
+        self.skill_detector.reset_for_new_round()
         
         self.hunt_thread = threading.Thread(target=self.hunt_loop)
         self.hunt_thread.daemon = True
         self.hunt_thread.start()
         
-        self.log_callback("Largato Hunt started! Round 1 beginning...")
-        self.logger.info("Largato hunt thread started")
+        self.log_callback("Advanced Largato Hunt started! Round 1 beginning...")
+        self.logger.info("Advanced Largato hunt thread started")
         return True
     
     def stop_hunt(self):
@@ -287,13 +296,13 @@ class LargatoHunter:
             seconds = int(duration % 60)
             self.log_callback(f"Hunt stopped. Duration: {minutes}m {seconds}s, Round: {self.current_round}")
         
-        self.log_callback("Largato Hunt stopped!")
-        self.logger.info("Largato hunt stopped")
+        self.log_callback("Advanced Largato Hunt stopped!")
+        self.logger.info("Advanced Largato hunt stopped")
         return True
     
     def hunt_loop(self):
-        self.log_callback(f"Starting Largato Hunt Round {self.current_round}...")
-        self.logger.info("Largato hunt loop started")
+        self.log_callback(f"Starting Advanced Largato Hunt Round {self.current_round}...")
+        self.logger.info("Advanced Largato hunt loop started")
         
         self.find_game_window()
         
@@ -303,22 +312,43 @@ class LargatoHunter:
                 phase_elapsed = current_time - self.phase_start_time
                 
                 if self.hunt_phase == "initial":
-                    if phase_elapsed >= 2.0:
-                        self.log_callback("Initial wait complete, selecting main skill...")
+                    if phase_elapsed >= 3.0:
+                        self.log_callback("Initial preparation complete, selecting main skill...")
                         press_key(None, 'f1')
-                        time.sleep(0.2)
-                        self.log_callback("Moving right...")
+                        time.sleep(0.3)
+                        self.log_callback("Moving right to locate wood stacks...")
                         self.hunt_phase = "moving_right"
                         self.phase_start_time = current_time
                     else:
                         time.sleep(0.1)
                 
                 elif self.hunt_phase == "moving_right":
-                    if phase_elapsed < 3.0:
-                        press_key(None, 'right')
-                        time.sleep(0.1)
+                    if self.current_round == 1:
+                        movement_duration = 3.0
+                    elif self.current_round == 2:
+                        movement_duration = 16.0
+                    elif self.current_round == 3:
+                        movement_duration = 7.0
+                    else:  # round 4
+                        movement_duration = 14.0
+                    
+                    if phase_elapsed < movement_duration:
+                        if self.current_round == 1:
+                            press_key(None, 'right')
+                            time.sleep(0.1)
+                        else:
+                            current_cycle = int(phase_elapsed / 0.2) % 2
+                            
+                            if current_cycle == 0:
+                                press_key(None, 'up')
+                            else:
+                                press_key(None, 'down')
+                            
+                            time.sleep(0.02)
+                            press_key(None, 'right')
+                            time.sleep(0.03)
                     else:
-                        self.log_callback("Right movement complete, moving left to start position...")
+                        self.log_callback("Right movement complete, positioning for attack...")
                         self.hunt_phase = "moving_left"
                         self.phase_start_time = current_time
                 
@@ -327,65 +357,71 @@ class LargatoHunter:
                         press_key(None, 'left')
                         time.sleep(0.1)
                     else:
-                        self.log_callback("Positioning complete, starting attack phase...")
+                        self.log_callback("Positioning complete, beginning attack sequence...")
                         self.hunt_phase = "attacking"
                         self.phase_start_time = current_time
-                        # Reset image comparison for this round
-                        self.skill_comparator.reset_stability_check()
+                        self.skill_detector.reset_for_new_round()
                 
                 elif self.hunt_phase == "attacking":
                     press_key(None, 'x')
-                    time.sleep(0.4)
+                    time.sleep(0.5)
                     
-                    if phase_elapsed >= 5.0:
-                        self.log_callback("Attack phase duration reached, monitoring skill stability...")
+                    if phase_elapsed >= 10.0:
+                        self.log_callback("Attack phase established, monitoring for round completion...")
                         self.hunt_phase = "monitoring_skill"
                         self.phase_start_time = current_time
-                        # Reset for monitoring phase
-                        self.skill_comparator.reset_stability_check()
+                        self.skill_detector.reset_for_new_round()
                 
                 elif self.hunt_phase == "monitoring_skill":
                     press_key(None, 'x')
-                    time.sleep(0.4)
+                    time.sleep(0.5)
                     
-                    # Get current skill bar image
                     skill_image = self.skill_bar_selector.get_current_screenshot_region()
                     if skill_image:
-                        # Check if skill is stable (round finished)
-                        if self.skill_comparator.check_skill_stability(skill_image):
-                            self.log_callback(f"Round {self.current_round} completed! Skill has been stable for 4+ seconds. Moving forward...")
+                        if self.skill_detector.detect_skill_change(skill_image):
+                            self.log_callback(f"Round {self.current_round} COMPLETED! Skill activity ceased. Advancing...")
                             self.hunt_phase = "round_complete"
                             self.phase_start_time = current_time
                             self.wood_stacks_destroyed += 1
                     else:
-                        self.logger.warning("Could not capture skill bar image")
+                        self.logger.warning("Could not capture skill bar image during monitoring")
                 
                 elif self.hunt_phase == "round_complete":
-                    if phase_elapsed < 5.0:
+                    movement_duration = 5.0 if self.current_round == 1 else 5.0
+                    
+                    if phase_elapsed < movement_duration:
+                        current_cycle = int(phase_elapsed / 0.2) % 2
+                        
+                        if current_cycle == 0:
+                            press_key(None, 'up')
+                        else:
+                            press_key(None, 'down')
+                        
+                        time.sleep(0.02)
                         press_key(None, 'right')
-                        time.sleep(0.1)
+                        time.sleep(0.03)
                     else:
                         self.current_round += 1
-                        self.log_callback(f"Starting Round {self.current_round}...")
+                        self.log_callback(f"Advancing to Round {self.current_round}...")
                         
                         if self.current_round > 4:
-                            self.log_callback("All 4 rounds completed! Hunt finished.")
+                            self.log_callback("All 4 rounds completed successfully! Hunt finished.")
                             break
                         
                         self.hunt_phase = "moving_right"
                         self.phase_start_time = current_time
-                        self.skill_comparator.reset_stability_check()
+                        self.skill_detector.reset_for_new_round()
                 
             except Exception as e:
-                self.log_callback(f"Error in hunt loop: {e}")
-                self.logger.error(f"Error in hunt loop: {e}", exc_info=True)
+                self.log_callback(f"Error in advanced hunt loop: {e}")
+                self.logger.error(f"Error in advanced hunt loop: {e}", exc_info=True)
                 time.sleep(1.0)
         
         if self.current_round > 4:
-            self.log_callback("Largato Hunt completed successfully!")
-            self.logger.info("Largato hunt completed successfully")
+            self.log_callback("Advanced Largato Hunt completed successfully!")
+            self.logger.info("Advanced Largato hunt completed successfully")
         else:
-            self.log_callback("Largato Hunt stopped before completion.")
-            self.logger.info("Largato hunt stopped by user")
+            self.log_callback("Advanced Largato Hunt stopped before completion.")
+            self.logger.info("Advanced Largato hunt stopped by user")
         
         self.running = False
