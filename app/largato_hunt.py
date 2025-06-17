@@ -406,7 +406,6 @@ class LargatoHunter:
                 
                 elif self.hunt_phase == "round1_moving_left":
                     if phase_elapsed < 0.4:
-                        press_key(None, 'left')
                         time.sleep(0.1)
                     else:
                         self.log_callback("Round 1 positioning complete, beginning attack sequence...")
@@ -530,6 +529,6 @@ class LargatoHunter:
             self.logger.info("Advanced Largato hunt completed successfully")
         else:
             self.log_callback("Advanced Largato Hunt stopped before completion.")
-            self.logger.info("Advanced Largato hunt stopped by user")
+            self.logger.info("Advanced Largatoxxxxhunt stopped by user")
         
         self.running = False
