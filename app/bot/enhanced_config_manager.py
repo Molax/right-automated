@@ -29,7 +29,7 @@ class ConfigManager:
             config = load_config()
             
             game_window = self.window_manager.game_window
-            if game_window.is_setup():
+            if game_window and hasattr(game_window, 'is_setup') and game_window.is_setup():
                 config["bars"]["game_window"]["x1"] = game_window.x1
                 config["bars"]["game_window"]["y1"] = game_window.y1
                 config["bars"]["game_window"]["x2"] = game_window.x2
@@ -37,7 +37,7 @@ class ConfigManager:
                 config["bars"]["game_window"]["configured"] = True
                 logger.info("Saved game window configuration")
             
-            if hasattr(self.hp_bar, 'x1') and self.hp_bar.is_setup():
+            if self.hp_bar and self.hp_bar.x1 is not None and self.hp_bar.is_setup():
                 config["bars"]["health_bar"]["x1"] = self.hp_bar.x1
                 config["bars"]["health_bar"]["y1"] = self.hp_bar.y1
                 config["bars"]["health_bar"]["x2"] = self.hp_bar.x2
@@ -45,7 +45,7 @@ class ConfigManager:
                 config["bars"]["health_bar"]["configured"] = True
                 logger.info("Saved health bar configuration")
             
-            if hasattr(self.mp_bar, 'x1') and self.mp_bar.is_setup():
+            if self.mp_bar and self.mp_bar.x1 is not None and self.mp_bar.is_setup():
                 config["bars"]["mana_bar"]["x1"] = self.mp_bar.x1
                 config["bars"]["mana_bar"]["y1"] = self.mp_bar.y1
                 config["bars"]["mana_bar"]["x2"] = self.mp_bar.x2
@@ -53,7 +53,7 @@ class ConfigManager:
                 config["bars"]["mana_bar"]["configured"] = True
                 logger.info("Saved mana bar configuration")
             
-            if hasattr(self.sp_bar, 'x1') and self.sp_bar.is_setup():
+            if self.sp_bar and self.sp_bar.x1 is not None and self.sp_bar.is_setup():
                 config["bars"]["stamina_bar"]["x1"] = self.sp_bar.x1
                 config["bars"]["stamina_bar"]["y1"] = self.sp_bar.y1
                 config["bars"]["stamina_bar"]["x2"] = self.sp_bar.x2
@@ -61,7 +61,7 @@ class ConfigManager:
                 config["bars"]["stamina_bar"]["configured"] = True
                 logger.info("Saved stamina bar configuration")
             
-            if hasattr(self.largato_skill_bar, 'x1') and self.largato_skill_bar.is_setup():
+            if self.largato_skill_bar and self.largato_skill_bar.x1 is not None and self.largato_skill_bar.is_setup():
                 if "largato_skill_bar" not in config["bars"]:
                     config["bars"]["largato_skill_bar"] = {
                         "x1": None,
@@ -107,117 +107,126 @@ class ConfigManager:
             bars_configured = 0
             
             game_window = self.window_manager.game_window
-            game_window_config = bars_config.get("game_window", {})
-            if game_window_config.get("configured", False) and hasattr(game_window, 'configure_from_saved'):
-                x1 = game_window_config.get("x1")
-                y1 = game_window_config.get("y1")
-                x2 = game_window_config.get("x2")
-                y2 = game_window_config.get("y2")
-                
-                if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
-                    if game_window.configure_from_saved(x1, y1, x2, y2):
-                        logger.info(f"Loaded game window configuration: ({x1},{y1}) to ({x2},{y2})")
-                        if not hasattr(game_window, 'preview_image') or game_window.preview_image is None:
-                            try:
-                                from PIL import ImageGrab
-                                game_window.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-                                logger.info("Created preview image for game window")
-                            except Exception as e:
-                                logger.warning(f"Could not create preview image for game window: {e}")
+            if game_window:
+                game_window_config = bars_config.get("game_window", {})
+                if game_window_config.get("configured", False) and hasattr(game_window, 'configure_from_saved'):
+                    x1 = game_window_config.get("x1")
+                    y1 = game_window_config.get("y1")
+                    x2 = game_window_config.get("x2")
+                    y2 = game_window_config.get("y2")
+                    
+                    if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
+                        if game_window.configure_from_saved(x1, y1, x2, y2):
+                            logger.info(f"Loaded game window configuration: ({x1},{y1}) to ({x2},{y2})")
+                            if not hasattr(game_window, 'preview_image') or game_window.preview_image is None:
+                                try:
+                                    from PIL import ImageGrab
+                                    game_window.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+                                    logger.info("Created preview image for game window")
+                                except Exception as e:
+                                    logger.warning(f"Could not create preview image for game window: {e}")
                 
                 if hasattr(self.window_manager, 'update_window_preview'):
                     self.window_manager.update_window_preview()
             
-            hp_config = bars_config.get("health_bar", {})
-            if hp_config.get("configured", False) and hasattr(self.hp_bar, 'configure_from_saved'):
-                x1 = hp_config.get("x1")
-                y1 = hp_config.get("y1")
-                x2 = hp_config.get("x2")
-                y2 = hp_config.get("y2")
-                
-                if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
-                    if self.hp_bar.configure_from_saved(x1, y1, x2, y2):
-                        logger.info(f"Loaded health bar configuration: ({x1},{y1}) to ({x2},{y2})")
-                        bars_configured += 1
-                        
-                        if hasattr(self.hp_bar, 'screen_selector'):
-                            self.hp_bar.screen_selector.title = "Health Bar"
+            if self.hp_bar:
+                hp_config = bars_config.get("health_bar", {})
+                if hp_config.get("configured", False) and hasattr(self.hp_bar, 'configure_from_saved'):
+                    x1 = hp_config.get("x1")
+                    y1 = hp_config.get("y1")
+                    x2 = hp_config.get("x2")
+                    y2 = hp_config.get("y2")
+                    
+                    if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
+                        if self.hp_bar.configure_from_saved(x1, y1, x2, y2):
+                            logger.info(f"Loaded health bar configuration: ({x1},{y1}) to ({x2},{y2})")
+                            bars_configured += 1
                             
-                        if not hasattr(self.hp_bar.screen_selector, 'preview_image') or self.hp_bar.screen_selector.preview_image is None:
-                            try:
-                                from PIL import ImageGrab
-                                self.hp_bar.screen_selector.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-                                logger.info("Created preview image for health bar")
-                            except Exception as e:
-                                logger.warning(f"Could not create preview image for health bar: {e}")
+                            bar_selector = getattr(self.hp_bar, 'bar_selector', None)
+                            if bar_selector and hasattr(bar_selector, 'title'):
+                                bar_selector.title = "Health Bar"
+                                
+                            if bar_selector and (not hasattr(bar_selector, 'preview_image') or bar_selector.preview_image is None):
+                                try:
+                                    from PIL import ImageGrab
+                                    bar_selector.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+                                    logger.info("Created preview image for health bar")
+                                except Exception as e:
+                                    logger.warning(f"Could not create preview image for health bar: {e}")
             
-            mp_config = bars_config.get("mana_bar", {})
-            if mp_config.get("configured", False) and hasattr(self.mp_bar, 'configure_from_saved'):
-                x1 = mp_config.get("x1")
-                y1 = mp_config.get("y1")
-                x2 = mp_config.get("x2")
-                y2 = mp_config.get("y2")
-                
-                if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
-                    if self.mp_bar.configure_from_saved(x1, y1, x2, y2):
-                        logger.info(f"Loaded mana bar configuration: ({x1},{y1}) to ({x2},{y2})")
-                        bars_configured += 1
-                        
-                        if hasattr(self.mp_bar, 'screen_selector'):
-                            self.mp_bar.screen_selector.title = "Mana Bar"
+            if self.mp_bar:
+                mp_config = bars_config.get("mana_bar", {})
+                if mp_config.get("configured", False) and hasattr(self.mp_bar, 'configure_from_saved'):
+                    x1 = mp_config.get("x1")
+                    y1 = mp_config.get("y1")
+                    x2 = mp_config.get("x2")
+                    y2 = mp_config.get("y2")
+                    
+                    if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
+                        if self.mp_bar.configure_from_saved(x1, y1, x2, y2):
+                            logger.info(f"Loaded mana bar configuration: ({x1},{y1}) to ({x2},{y2})")
+                            bars_configured += 1
                             
-                        if not hasattr(self.mp_bar.screen_selector, 'preview_image') or self.mp_bar.screen_selector.preview_image is None:
-                            try:
-                                from PIL import ImageGrab
-                                self.mp_bar.screen_selector.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-                                logger.info("Created preview image for mana bar")
-                            except Exception as e:
-                                logger.warning(f"Could not create preview image for mana bar: {e}")
+                            bar_selector = getattr(self.mp_bar, 'bar_selector', None)
+                            if bar_selector and hasattr(bar_selector, 'title'):
+                                bar_selector.title = "Mana Bar"
+                                
+                            if bar_selector and (not hasattr(bar_selector, 'preview_image') or bar_selector.preview_image is None):
+                                try:
+                                    from PIL import ImageGrab
+                                    bar_selector.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+                                    logger.info("Created preview image for mana bar")
+                                except Exception as e:
+                                    logger.warning(f"Could not create preview image for mana bar: {e}")
             
-            sp_config = bars_config.get("stamina_bar", {})
-            if sp_config.get("configured", False) and hasattr(self.sp_bar, 'configure_from_saved'):
-                x1 = sp_config.get("x1")
-                y1 = sp_config.get("y1")
-                x2 = sp_config.get("x2")
-                y2 = sp_config.get("y2")
-                
-                if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
-                    if self.sp_bar.configure_from_saved(x1, y1, x2, y2):
-                        logger.info(f"Loaded stamina bar configuration: ({x1},{y1}) to ({x2},{y2})")
-                        bars_configured += 1
-                        
-                        if hasattr(self.sp_bar, 'screen_selector'):
-                            self.sp_bar.screen_selector.title = "Stamina Bar"
+            if self.sp_bar:
+                sp_config = bars_config.get("stamina_bar", {})
+                if sp_config.get("configured", False) and hasattr(self.sp_bar, 'configure_from_saved'):
+                    x1 = sp_config.get("x1")
+                    y1 = sp_config.get("y1")
+                    x2 = sp_config.get("x2")
+                    y2 = sp_config.get("y2")
+                    
+                    if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
+                        if self.sp_bar.configure_from_saved(x1, y1, x2, y2):
+                            logger.info(f"Loaded stamina bar configuration: ({x1},{y1}) to ({x2},{y2})")
+                            bars_configured += 1
                             
-                        if not hasattr(self.sp_bar.screen_selector, 'preview_image') or self.sp_bar.screen_selector.preview_image is None:
-                            try:
-                                from PIL import ImageGrab
-                                self.sp_bar.screen_selector.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-                                logger.info("Created preview image for stamina bar")
-                            except Exception as e:
-                                logger.warning(f"Could not create preview image for stamina bar: {e}")
+                            bar_selector = getattr(self.sp_bar, 'bar_selector', None)
+                            if bar_selector and hasattr(bar_selector, 'title'):
+                                bar_selector.title = "Stamina Bar"
+                                
+                            if bar_selector and (not hasattr(bar_selector, 'preview_image') or bar_selector.preview_image is None):
+                                try:
+                                    from PIL import ImageGrab
+                                    bar_selector.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+                                    logger.info("Created preview image for stamina bar")
+                                except Exception as e:
+                                    logger.warning(f"Could not create preview image for stamina bar: {e}")
             
-            largato_config = bars_config.get("largato_skill_bar", {})
-            if largato_config.get("configured", False) and hasattr(self.largato_skill_bar, 'configure_from_saved'):
-                x1 = largato_config.get("x1")
-                y1 = largato_config.get("y1")
-                x2 = largato_config.get("x2")
-                y2 = largato_config.get("y2")
-                
-                if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
-                    if self.largato_skill_bar.configure_from_saved(x1, y1, x2, y2):
-                        logger.info(f"Loaded Largato skill bar configuration: ({x1},{y1}) to ({x2},{y2})")
-                        
-                        if hasattr(self.largato_skill_bar, 'screen_selector'):
-                            self.largato_skill_bar.screen_selector.title = "Largato Skill Bar"
+            if self.largato_skill_bar:
+                largato_config = bars_config.get("largato_skill_bar", {})
+                if largato_config.get("configured", False) and hasattr(self.largato_skill_bar, 'configure_from_saved'):
+                    x1 = largato_config.get("x1")
+                    y1 = largato_config.get("y1")
+                    x2 = largato_config.get("x2")
+                    y2 = largato_config.get("y2")
+                    
+                    if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
+                        if self.largato_skill_bar.configure_from_saved(x1, y1, x2, y2):
+                            logger.info(f"Loaded Largato skill bar configuration: ({x1},{y1}) to ({x2},{y2})")
                             
-                        if not hasattr(self.largato_skill_bar.screen_selector, 'preview_image') or self.largato_skill_bar.screen_selector.preview_image is None:
-                            try:
-                                from PIL import ImageGrab
-                                self.largato_skill_bar.screen_selector.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-                                logger.info("Created preview image for Largato skill bar")
-                            except Exception as e:
-                                logger.warning(f"Could not create preview image for Largato skill bar: {e}")
+                            bar_selector = getattr(self.largato_skill_bar, 'bar_selector', None)
+                            if bar_selector and hasattr(bar_selector, 'title'):
+                                bar_selector.title = "Largato Skill Bar"
+                                
+                            if bar_selector and (not hasattr(bar_selector, 'preview_image') or bar_selector.preview_image is None):
+                                try:
+                                    from PIL import ImageGrab
+                                    bar_selector.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+                                    logger.info("Created preview image for Largato skill bar")
+                                except Exception as e:
+                                    logger.warning(f"Could not create preview image for Largato skill bar: {e}")
             
             self.settings_provider.set_settings(config)
             

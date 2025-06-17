@@ -1,7 +1,7 @@
 """
-Enhanced Main GUI integration for Largato Hunt
----------------------------------------------
-Integration code to connect all enhanced components.
+Enhanced Main GUI integration for Largato Hunt - Simplified Version
+------------------------------------------------------------------
+Direct integration without complex adapter patterns.
 """
 
 import time
@@ -81,80 +81,30 @@ class EnhancedPristonTaleBot:
         control_frame = ttk.LabelFrame(right_column, text="Bot Control", padding=5)
         control_frame.pack(fill=tk.X, pady=(5, 0))
         
-        try:
-            from app.ui.bar_selector_ui import BarSelectorUI
-            self.bar_selector_ui = BarSelectorUI(bars_frame, root, self.log)
-        except ImportError:
-            from app.ui.bar_selector_ui import BarSelectorUI
-            self.bar_selector_ui = BarSelectorUI(bars_frame, root, self.log)
-            logger.warning("Using standard bar selector UI (Enhanced version not available)")
+        from app.ui.bar_selector_ui import BarSelectorUI
+        self.bar_selector_ui = BarSelectorUI(bars_frame, root, self.log)
         
         from app.ui.settings_ui import SettingsUI
         self.settings_ui = SettingsUI(settings_frame, self.save_config)
         
-        try:
-            from app.bot.enhanced_config_manager import ConfigManager
-            if hasattr(self.bar_selector_ui, 'largato_skill_selector'):
-                self.config_manager = ConfigManager(
-                    self.settings_ui,
-                    self.bar_selector_ui.hp_bar_selector,
-                    self.bar_selector_ui.mp_bar_selector,
-                    self.bar_selector_ui.sp_bar_selector,
-                    self.bar_selector_ui.largato_skill_selector,
-                    self,
-                    self.log
-                )
-            else:
-                from app.ui.config_manager_ui import ConfigManagerUI
-                self.config_manager = ConfigManagerUI(
-                    self.bar_selector_ui,
-                    self.settings_ui,
-                    self.log
-                )
-        except ImportError:
-            from app.ui.config_manager_ui import ConfigManagerUI
-            self.config_manager = ConfigManagerUI(
-                self.bar_selector_ui,
-                self.settings_ui,
-                self.log
-            )
+        from app.ui.config_manager_ui import ConfigManagerUI
+        self.config_manager = ConfigManagerUI(
+            self.bar_selector_ui,
+            self.settings_ui,
+            self.log
+        )
         
-        try:
-            from app.ui.bot_controller import BotControllerUI
-            if hasattr(self.bar_selector_ui, 'largato_skill_selector'):
-                self.bot_controller = BotControllerUI(
-                    control_frame,
-                    root,
-                    self.bar_selector_ui.hp_bar_selector,
-                    self.bar_selector_ui.mp_bar_selector,
-                    self.bar_selector_ui.sp_bar_selector,
-                    self.bar_selector_ui.largato_skill_selector,
-                    self.settings_ui,
-                    self.log
-                )
-            else:
-                from app.ui.bot_controller import BotControllerUI
-                self.bot_controller = BotControllerUI(
-                    control_frame,
-                    root,
-                    self.bar_selector_ui.hp_bar_selector,
-                    self.bar_selector_ui.mp_bar_selector,
-                    self.bar_selector_ui.sp_bar_selector,
-                    self.settings_ui,
-                    self.log
-                )
-                logger.warning("Using standard bot controller (Enhanced version not available)")
-        except ImportError:
-            from app.ui.bot_controller import BotControllerUI
-            self.bot_controller = BotControllerUI(
-                control_frame,
-                root,
-                self.bar_selector_ui.hp_bar_selector,
-                self.bar_selector_ui.mp_bar_selector,
-                self.bar_selector_ui.sp_bar_selector,
-                self.settings_ui,
-                self.log
-            )
+        from app.ui.bot_controller import BotControllerUI
+        self.bot_controller = BotControllerUI(
+            control_frame,
+            root,
+            self.bar_selector_ui.hp_bar_selector,
+            self.bar_selector_ui.mp_bar_selector,
+            self.bar_selector_ui.sp_bar_selector,
+            self.bar_selector_ui.largato_skill_selector,
+            self.settings_ui,
+            self.log
+        )
         
         self.log("Enhanced Bot GUI initialized successfully")
         
@@ -201,7 +151,13 @@ class EnhancedPristonTaleBot:
             if configured < 4:
                 self.root.after(1000, self.check_bar_config)
         else:
-            configured = self.bar_selector_ui.get_configured_count() if hasattr(self.bar_selector_ui, 'get_configured_count') else 0
+            configured = 0
+            if hasattr(self.bar_selector_ui, 'hp_bar_selector') and self.bar_selector_ui.hp_bar_selector.is_setup():
+                configured += 1
+            if hasattr(self.bar_selector_ui, 'mp_bar_selector') and self.bar_selector_ui.mp_bar_selector.is_setup():
+                configured += 1
+            if hasattr(self.bar_selector_ui, 'sp_bar_selector') and self.bar_selector_ui.sp_bar_selector.is_setup():
+                configured += 1
             
             if configured > 0:
                 self.bot_controller.set_status(f"{configured}/3 bars configured")
