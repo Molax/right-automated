@@ -22,20 +22,29 @@ class EnhancedPristonTaleBot:
         self.root.geometry("900x700")
         self.root.minsize(800, 600)
         
-        main_frame = ttk.Frame(root)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        title_frame = ttk.Frame(main_frame)
+        # NEW CODE
+        main_container = ttk.Frame(root)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Create title with version
+        title_frame = ttk.Frame(main_container)
         title_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        title_label = ttk.Label(title_frame, text="Priston Tale Bot", font=("Arial", 16, "bold"))
-        title_label.pack(side=tk.LEFT)
-        
-        version_label = ttk.Label(title_frame, text="v1.0.0 Enhanced", font=("Arial", 10))
-        version_label.pack(side=tk.RIGHT, padx=5)
-        
-        content_frame = ttk.Frame(main_frame)
-        content_frame.pack(fill=tk.BOTH, expand=True)
+
+        # ... title code stays the same
+
+        # Create scrollable container
+        scrollable_container = ScrollableFrame(main_container)
+        scrollable_container.pack(fill=tk.BOTH, expand=True)
+
+        # Content goes inside the scrollable frame
+        content_frame = scrollable_container.scrollable_frame
+
+        # Create two-column layout
+        left_column = ttk.Frame(content_frame)
+        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+
+        right_column = ttk.Frame(content_frame)
+        right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
         
         left_column = ttk.Frame(content_frame)
         left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
