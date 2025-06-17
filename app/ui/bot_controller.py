@@ -82,6 +82,7 @@ except:
             self.log_callback = log_callback
             self.running = False
             self.wood_stacks_destroyed = 0
+            self.current_round = 1
         
         def start_hunt(self):
             self.log_callback("ERROR: Largato Hunt module not available!")
@@ -92,6 +93,9 @@ except:
             
         def set_skill_bar_selector(self, selector):
             pass
+        
+        def get_skill_percentage(self):
+            return 0
 
 from app.bar_selector import BarDetector, HEALTH_COLOR_RANGE, MANA_COLOR_RANGE, STAMINA_COLOR_RANGE
 from app.config import load_config
@@ -118,8 +122,6 @@ class BotControllerUI:
         
         self.largato_running = False
         self.largato_hunter = LargatoHunter(self.log_callback)
-        if self.largato_skill_bar:
-            self.largato_hunter.set_skill_bar_selector(self.largato_skill_bar)
         
         self.prev_hp_percent = 100.0
         self.prev_mp_percent = 100.0
@@ -359,12 +361,10 @@ class BotControllerUI:
             logger.info("Largato hunt button clicked, but hunt is already running")
             return
         
-        # Enhanced skill bar check with detailed logging
         skill_bar_configured = self._is_skill_bar_configured()
         logger.info(f"Skill bar configuration check result: {skill_bar_configured}")
         
         if not skill_bar_configured:
-            # Additional debug information
             if self.largato_skill_bar:
                 logger.info(f"Largato skill bar type: {type(self.largato_skill_bar)}")
                 logger.info(f"Largato skill bar attributes: {dir(self.largato_skill_bar)}")
@@ -398,70 +398,18 @@ class BotControllerUI:
         else:
             self.largato_running = False
             self.log_callback("Failed to start Largato Hunt")
-            
-        if not LARGATO_AVAILABLE:
-            messagebox.showerror(
-                "Largato Hunt Not Available",
-                "Largato Hunt module is not properly installed.\n\n"
-                "Please ensure the module is available and try again.",
-                parent=self.root
-            )
-            return
-            
-        if self.running:
-            messagebox.showwarning(
-                "Bot Already Running",
-                "Please stop the regular bot before starting Largato Hunt.",
-                parent=self.root
-            )
-            return
-            
-        if self.largato_running:
-            logger.info("Largato hunt button clicked, but hunt is already running")
-            return
-        
-        if not self.largato_skill_bar or not self._is_skill_bar_configured():
-            messagebox.showerror(
-                "Largato Skill Bar Not Configured",
-                "Please configure the Largato skill bar first.\n\n"
-                "Go to the Bar Selection tab and select the Largato skill bar.",
-                parent=self.root
-            )
-            return
-        
-        self.log_callback("Starting Largato Hunt...")
-        self.largato_running = True
-        
-        self.largato_round_var.set("1/4")
-        
-        self.largato_hunter.set_skill_bar_selector(self.largato_skill_bar)
-        success = self.largato_hunter.start_hunt()
-        
-        if success:
-            self.start_button.config(state=tk.DISABLED, bg="#a0a0a0")
-            self.largato_button.config(text="STOP LARGATO\n(Ctrl+Shift+L)", bg="#F44336")
-            self.stop_button.config(state=tk.NORMAL, bg="#F44336")
-            
-            self.status_var.set("Largato Hunt is running")
-            
-            self._update_largato_progress()
-        else:
-            self.largato_running = False
-            self.log_callback("Failed to start Largato Hunt")
     
     def _is_skill_bar_configured(self):
-        """Check if the Largato skill bar is properly configured"""
         if not self.largato_skill_bar:
             logger.debug("Largato skill bar is None")
             return False
         
-        # Direct check on the skill bar object
         if hasattr(self.largato_skill_bar, 'is_setup'):
             result = self.largato_skill_bar.is_setup()
             logger.debug(f"Largato skill bar is_setup() returned: {result}")
-            return result
+            if result:
+                return True
         
-        # Check for coordinate attributes
         if hasattr(self.largato_skill_bar, 'x1'):
             has_coords = (self.largato_skill_bar.x1 is not None and 
                         self.largato_skill_bar.y1 is not None and

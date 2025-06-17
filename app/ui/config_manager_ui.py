@@ -117,7 +117,7 @@ class ConfigManagerUI:
             
             game_window = self.bar_selector_ui.game_window
             game_window_config = bars_config.get("game_window", {})
-            if game_window_config.get("configured", False) and hasattr(game_window, 'configure_from_saved'):
+            if game_window_config.get("configured", False):
                 x1 = game_window_config.get("x1")
                 y1 = game_window_config.get("y1")
                 x2 = game_window_config.get("x2")
@@ -137,7 +137,7 @@ class ConfigManagerUI:
             
             hp_bar = self.bar_selector_ui.hp_bar_selector
             hp_config = bars_config.get("health_bar", {})
-            if hp_config.get("configured", False) and hasattr(hp_bar, 'configure_from_saved'):
+            if hp_config.get("configured", False):
                 x1 = hp_config.get("x1")
                 y1 = hp_config.get("y1")
                 x2 = hp_config.get("x2")
@@ -145,6 +145,7 @@ class ConfigManagerUI:
                 
                 if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
                     if hp_bar.configure_from_saved(x1, y1, x2, y2):
+                        hp_bar.title = "Health"
                         logger.info(f"Loaded health bar configuration: ({x1},{y1}) to ({x2},{y2})")
                         bars_configured += 1
                         
@@ -159,7 +160,7 @@ class ConfigManagerUI:
             
             mp_bar = self.bar_selector_ui.mp_bar_selector
             mp_config = bars_config.get("mana_bar", {})
-            if mp_config.get("configured", False) and hasattr(mp_bar, 'configure_from_saved'):
+            if mp_config.get("configured", False):
                 x1 = mp_config.get("x1")
                 y1 = mp_config.get("y1")
                 x2 = mp_config.get("x2")
@@ -167,6 +168,7 @@ class ConfigManagerUI:
                 
                 if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
                     if mp_bar.configure_from_saved(x1, y1, x2, y2):
+                        mp_bar.title = "Mana"
                         logger.info(f"Loaded mana bar configuration: ({x1},{y1}) to ({x2},{y2})")
                         bars_configured += 1
                         
@@ -181,7 +183,7 @@ class ConfigManagerUI:
             
             sp_bar = self.bar_selector_ui.sp_bar_selector
             sp_config = bars_config.get("stamina_bar", {})
-            if sp_config.get("configured", False) and hasattr(sp_bar, 'configure_from_saved'):
+            if sp_config.get("configured", False):
                 x1 = sp_config.get("x1")
                 y1 = sp_config.get("y1")
                 x2 = sp_config.get("x2")
@@ -189,6 +191,7 @@ class ConfigManagerUI:
                 
                 if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
                     if sp_bar.configure_from_saved(x1, y1, x2, y2):
+                        sp_bar.title = "Stamina"
                         logger.info(f"Loaded stamina bar configuration: ({x1},{y1}) to ({x2},{y2})")
                         bars_configured += 1
                         
@@ -204,7 +207,7 @@ class ConfigManagerUI:
             if hasattr(self.bar_selector_ui, 'largato_skill_selector'):
                 largato_bar = self.bar_selector_ui.largato_skill_selector
                 largato_config = bars_config.get("largato_skill_bar", {})
-                if largato_config.get("configured", False) and hasattr(largato_bar, 'configure_from_saved'):
+                if largato_config.get("configured", False):
                     x1 = largato_config.get("x1")
                     y1 = largato_config.get("y1")
                     x2 = largato_config.get("x2")
@@ -212,6 +215,7 @@ class ConfigManagerUI:
                     
                     if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
                         if largato_bar.configure_from_saved(x1, y1, x2, y2):
+                            largato_bar.title = "Largato Skill"
                             logger.info(f"Loaded Largato skill bar configuration: ({x1},{y1}) to ({x2},{y2})")
                             
                             if not hasattr(largato_bar, 'preview_image') or largato_bar.preview_image is None:
@@ -221,7 +225,7 @@ class ConfigManagerUI:
                                 except Exception as e:
                                     logger.warning(f"Could not create preview image for Largato skill bar: {e}")
                                     
-                    self.bar_selector_ui.update_preview_image(largato_bar, self.bar_selector_ui.largato_preview_label)
+                        self.bar_selector_ui.update_preview_image(largato_bar, self.bar_selector_ui.largato_preview_label)
             
             self.settings_ui.set_settings(config)
             
