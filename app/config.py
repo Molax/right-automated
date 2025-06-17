@@ -53,6 +53,13 @@ DEFAULT_CONFIG = {
             "y2": None,
             "configured": False
         },
+        "largato_skill_bar": {
+            "x1": None,
+            "y1": None, 
+            "x2": None,
+            "y2": None,
+            "configured": False
+        },
         "health_bar": {
             "x1": None,
             "y1": None,
