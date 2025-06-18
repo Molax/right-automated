@@ -93,7 +93,7 @@ class EnhancedPristonTaleBot:
         from app.ui.bar_selector_ui import BarSelectorUI
         self.bar_selector_ui = BarSelectorUI(bars_frame, root, self.log)
         
-        from app.ui.settings_ui import SettingsUI
+        from app.ui.bot_controller_ui import SettingsUI
         self.settings_ui = SettingsUI(settings_frame, self.save_config)
         
         from app.ui.config_manager_ui import ConfigManagerUI

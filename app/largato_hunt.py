@@ -234,6 +234,38 @@ class LargatoHunter:
         
         self.game_window_rect = None
         
+        self.hp_bar_selector = None
+        self.mp_bar_selector = None
+        self.sp_bar_selector = None
+        self.settings_provider = None
+        
+        self.hp_detector = None
+        self.mp_detector = None
+        self.sp_detector = None
+        
+        self.last_hp_potion = 0
+        self.last_mp_potion = 0
+        self.last_sp_potion = 0
+        
+        self.hp_potions_used = 0
+        self.mp_potions_used = 0
+        self.sp_potions_used = 0
+        
+    def set_potion_system(self, hp_bar, mp_bar, sp_bar, settings_provider):
+        self.hp_bar_selector = hp_bar
+        self.mp_bar_selector = mp_bar
+        self.sp_bar_selector = sp_bar
+        self.settings_provider = settings_provider
+        
+        try:
+            from app.bar_selector import BarDetector, HEALTH_COLOR_RANGE, MANA_COLOR_RANGE, STAMINA_COLOR_RANGE
+            self.hp_detector = BarDetector("Health", HEALTH_COLOR_RANGE)
+            self.mp_detector = BarDetector("Mana", MANA_COLOR_RANGE)
+            self.sp_detector = BarDetector("Stamina", STAMINA_COLOR_RANGE)
+            self.logger.info("Potion system configured for Largato Hunt")
+        except Exception as e:
+            self.logger.error(f"Error setting up potion system: {e}")
+        
     def set_skill_bar_selector(self, skill_bar_selector):
         self.skill_bar_selector = skill_bar_selector
         self.logger.info("Largato skill bar selector configured")
@@ -282,6 +314,89 @@ class LargatoHunter:
             self.logger.error(f"Error getting skill percentage: {e}")
             return 0
     
+    def check_and_use_potions(self):
+        if not all([self.hp_bar_selector, self.mp_bar_selector, self.sp_bar_selector, 
+                   self.settings_provider, self.hp_detector, self.mp_detector, self.sp_detector]):
+            return
+            
+        try:
+            current_time = time.time()
+            settings = self.settings_provider.get_settings()
+            potion_cooldown = settings.get("potion_cooldown", 3.0)
+            
+            hp_threshold = settings["thresholds"]["health"]
+            mp_threshold = settings["thresholds"]["mana"]
+            sp_threshold = settings["thresholds"]["stamina"]
+            
+            if self.hp_bar_selector.is_setup():
+                hp_image = self.hp_bar_selector.get_current_screenshot_region()
+                if hp_image:
+                    hp_percent = self.hp_detector.detect_percentage(hp_image)
+                    if hp_percent < hp_threshold and current_time - self.last_hp_potion > potion_cooldown:
+                        hp_key = settings["potion_keys"]["health"]
+                        press_key(None, hp_key)
+                        self.last_hp_potion = current_time
+                        self.hp_potions_used += 1
+                        self.log_callback(f"Used health potion ({hp_percent:.1f}%)")
+            
+            if self.mp_bar_selector.is_setup():
+                mp_image = self.mp_bar_selector.get_current_screenshot_region()
+                if mp_image:
+                    mp_percent = self.mp_detector.detect_percentage(mp_image)
+                    if mp_percent < mp_threshold and current_time - self.last_mp_potion > potion_cooldown:
+                        mp_key = settings["potion_keys"]["mana"]
+                        press_key(None, mp_key)
+                        self.last_mp_potion = current_time
+                        self.mp_potions_used += 1
+                        self.log_callback(f"Used mana potion ({mp_percent:.1f}%)")
+            
+            if self.sp_bar_selector.is_setup():
+                sp_image = self.sp_bar_selector.get_current_screenshot_region()
+                if sp_image:
+                    sp_percent = self.sp_detector.detect_percentage(sp_image)
+                    if sp_percent < sp_threshold and current_time - self.last_sp_potion > potion_cooldown:
+                        sp_key = settings["potion_keys"]["stamina"]
+                        press_key(None, sp_key)
+                        self.last_sp_potion = current_time
+                        self.sp_potions_used += 1
+                        self.log_callback(f"Used stamina potion ({sp_percent:.1f}%)")
+                        
+        except Exception as e:
+            self.logger.error(f"Error checking potions: {e}")
+    
+    def improved_movement_right(self, phase_elapsed, movement_duration):
+        cycle_duration = 0.08
+        current_cycle = int(phase_elapsed / cycle_duration) % 10
+        
+        if current_cycle == 0:
+            press_key(None, 'up')
+            press_key(None, 'up')
+        elif current_cycle == 1:
+            pass
+        elif current_cycle == 2:
+            press_key(None, 'down')
+            press_key(None, 'down')
+            press_key(None, 'down')
+        elif current_cycle == 3:
+            pass
+        elif current_cycle == 4:
+            press_key(None, 'up')
+        elif current_cycle == 5:
+            pass
+        elif current_cycle == 6:
+            press_key(None, 'down')
+            press_key(None, 'down')
+        elif current_cycle == 7:
+            pass
+        elif current_cycle == 8:
+            press_key(None, 'up')
+        else:
+            pass
+        
+        time.sleep(0.01)
+        press_key(None, 'right')
+        time.sleep(0.01)
+    
     def start_hunt(self):
         if self.running:
             self.logger.info("Hunt already running")
@@ -298,6 +413,13 @@ class LargatoHunter:
         self.hunt_phase = "initial"
         self.phase_start_time = time.time()
         self.skill_detector.reset_for_new_round()
+        
+        self.last_hp_potion = 0
+        self.last_mp_potion = 0
+        self.last_sp_potion = 0
+        self.hp_potions_used = 0
+        self.mp_potions_used = 0
+        self.sp_potions_used = 0
         
         self.hunt_thread = threading.Thread(target=self.hunt_loop)
         self.hunt_thread.daemon = True
@@ -322,6 +444,7 @@ class LargatoHunter:
             minutes = int(duration // 60)
             seconds = int(duration % 60)
             self.log_callback(f"Hunt stopped. Duration: {minutes}m {seconds}s, Round: {self.current_round}")
+            self.log_callback(f"Potions used: HP({self.hp_potions_used}) MP({self.mp_potions_used}) SP({self.sp_potions_used})")
         
         self.log_callback("Advanced Largato Hunt stopped!")
         self.logger.info("Advanced Largato hunt stopped")
@@ -337,6 +460,8 @@ class LargatoHunter:
             try:
                 current_time = time.time()
                 phase_elapsed = current_time - self.phase_start_time
+                
+                self.check_and_use_potions()
                 
                 if self.hunt_phase == "initial":
                     if phase_elapsed >= 3.0:
@@ -418,31 +543,11 @@ class LargatoHunter:
                         movement_duration = 20.0
                     elif self.current_round == 3:
                         movement_duration = 7.0
-                    else:  # round 4
+                    else:
                         movement_duration = 14.0
                     
                     if phase_elapsed < movement_duration:
-                        cycle_duration = 0.08
-                        current_cycle = int(phase_elapsed / cycle_duration) % 6
-                        
-                        if current_cycle == 0:
-                            press_key(None, 'up')
-                            press_key(None, 'up')
-                        elif current_cycle == 1:
-                            pass
-                        elif current_cycle == 2:
-                            press_key(None, 'down')
-                            press_key(None, 'down')
-                        elif current_cycle == 3:
-                            pass
-                        elif current_cycle == 4:
-                            press_key(None, 'up')
-                        else:
-                            pass
-                        
-                        time.sleep(0.01)
-                        press_key(None, 'right')
-                        time.sleep(0.01)
+                        self.improved_movement_right(phase_elapsed, movement_duration)
                     else:
                         self.log_callback("Right movement complete, positioning for attack...")
                         self.hunt_phase = "moving_left"
@@ -486,27 +591,7 @@ class LargatoHunter:
                     movement_duration = 5.0
                     
                     if phase_elapsed < movement_duration:
-                        cycle_duration = 0.08
-                        current_cycle = int(phase_elapsed / cycle_duration) % 6
-                        
-                        if current_cycle == 0:
-                            press_key(None, 'up')
-                            press_key(None, 'up')
-                        elif current_cycle == 1:
-                            pass
-                        elif current_cycle == 2:
-                            press_key(None, 'down')
-                            press_key(None, 'down')
-                        elif current_cycle == 3:
-                            pass
-                        elif current_cycle == 4:
-                            press_key(None, 'up')
-                        else:
-                            pass
-                        
-                        time.sleep(0.01)
-                        press_key(None, 'right')
-                        time.sleep(0.01)
+                        self.improved_movement_right(phase_elapsed, movement_duration)
                     else:
                         self.current_round += 1
                         self.log_callback(f"Advancing to Round {self.current_round}...")
@@ -525,10 +610,14 @@ class LargatoHunter:
                 time.sleep(1.0)
         
         if self.current_round > 4:
-            self.log_callback("Advanced Largato Hunt completed successfully!")
+            duration = time.time() - self.hunt_start_time
+            minutes = int(duration // 60)
+            seconds = int(duration % 60)
+            self.log_callback(f"Advanced Largato Hunt completed successfully! Duration: {minutes}m {seconds}s")
+            self.log_callback(f"Total potions used: HP({self.hp_potions_used}) MP({self.mp_potions_used}) SP({self.sp_potions_used})")
             self.logger.info("Advanced Largato hunt completed successfully")
         else:
             self.log_callback("Advanced Largato Hunt stopped before completion.")
-            self.logger.info("Advanced Largatoxxxxhunt stopped by user")
+            self.logger.info("Advanced Largato hunt stopped by user")
         
         self.running = False
