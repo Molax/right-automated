@@ -1,16 +1,8 @@
-"""
-Enhanced Bar selector UI for Priston Tale Potion Bot with Largato Skill
-----------------------------------------------------------------------
-Extended to include Largato skill bar selection alongside health, mana, and stamina.
-"""
-
 import tkinter as tk
 from tkinter import ttk
 import logging
 from PIL import ImageTk, Image, ImageGrab
-
-import app.bar_selector
-ScreenSelector = app.bar_selector.ScreenSelector
+from app.bar_selector import ScreenSelector
 
 logger = logging.getLogger('PristonBot')
 
@@ -114,16 +106,17 @@ class BarSelectorUI:
                     preview_photo = ImageTk.PhotoImage(resized_img)
                     
                     try:
-                        from app.gui import main_app
-                        if hasattr(main_app, 'window_preview_label'):
-                            main_app.window_preview_label.config(image=preview_photo, text="")
-                            main_app.window_preview_label.image = preview_photo
+                        import app.gui
+                        if hasattr(app.gui, 'main_app') and hasattr(app.gui.main_app, 'window_preview_label'):
+                            app.gui.main_app.window_preview_label.config(image=preview_photo, text="")
+                            app.gui.main_app.window_preview_label.image = preview_photo
                     except (ImportError, AttributeError):
                         try:
-                            if hasattr(self.root, 'window_preview_label'):
-                                self.root.window_preview_label.config(image=preview_photo, text="")
-                                self.root.window_preview_label.image = preview_photo
-                        except:
+                            import enhanced_gui
+                            if hasattr(enhanced_gui, 'main_app') and hasattr(enhanced_gui.main_app, 'window_preview_label'):
+                                enhanced_gui.main_app.window_preview_label.config(image=preview_photo, text="")
+                                enhanced_gui.main_app.window_preview_label.image = preview_photo
+                        except (ImportError, AttributeError):
                             pass
                     
                     self.log_callback(f"Game window selected: ({self.game_window.x1},{self.game_window.y1}) to ({self.game_window.x2},{self.game_window.y2})")
@@ -180,7 +173,8 @@ class BarSelectorUI:
     
     def update_status(self):
         count = self.get_configured_count()
-        self.status_var.set(f"Bars Configured: {count}/4")
+        total_count = self.get_total_count()
+        self.status_var.set(f"Bars Configured: {count}/{total_count}")
     
     def is_bars_configured(self):
         return (self.hp_bar_selector.is_setup() and 
@@ -200,3 +194,6 @@ class BarSelectorUI:
             self.sp_bar_selector.is_setup(),
             self.largato_skill_selector.is_setup()
         ])
+    
+    def get_total_count(self):
+        return 4

@@ -22,33 +22,28 @@ class EnhancedPristonTaleBot:
         self.root.geometry("900x700")
         self.root.minsize(800, 600)
         
-        # NEW CODE
         main_container = ttk.Frame(root)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Create title with version
         title_frame = ttk.Frame(main_container)
         title_frame.pack(fill=tk.X, pady=(0, 10))
 
-        # ... title code stays the same
+        title_label = ttk.Label(title_frame, text="Priston Tale Bot - Enhanced", 
+                               font=("Arial", 16, "bold"))
+        title_label.pack(side=tk.LEFT)
 
-        # Create scrollable container
+        version_label = ttk.Label(title_frame, text="v1.0.0", 
+                                 font=("Arial", 10), foreground="#666666")
+        version_label.pack(side=tk.RIGHT)
+
         scrollable_container = ScrollableFrame(main_container)
         scrollable_container.pack(fill=tk.BOTH, expand=True)
 
-        # Content goes inside the scrollable frame
         content_frame = scrollable_container.scrollable_frame
 
-        # Create two-column layout
         left_column = ttk.Frame(content_frame)
         left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
 
-        right_column = ttk.Frame(content_frame)
-        right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
-        
-        left_column = ttk.Frame(content_frame)
-        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
-        
         right_column = ttk.Frame(content_frame)
         right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
         
@@ -93,7 +88,7 @@ class EnhancedPristonTaleBot:
         from app.ui.bar_selector_ui import BarSelectorUI
         self.bar_selector_ui = BarSelectorUI(bars_frame, root, self.log)
         
-        from app.ui.bot_controller_ui import SettingsUI
+        from app.ui.settings_ui import SettingsUI
         self.settings_ui = SettingsUI(settings_frame, self.save_config)
         
         from app.ui.config_manager_ui import ConfigManagerUI
@@ -103,7 +98,7 @@ class EnhancedPristonTaleBot:
             self.log
         )
         
-        from app.ui.bot_controller import BotControllerUI
+        from app.ui.bot_controller_ui import BotControllerUI
         self.bot_controller = BotControllerUI(
             control_frame,
             root,
@@ -121,7 +116,7 @@ class EnhancedPristonTaleBot:
             self.log("Loaded saved configuration")
         else:
             self.log("No saved configuration found or loading failed")
-            self.log("Please select all bars including Largato skill bar to use enhanced features")
+            self.log("Please select all bars to use enhanced features")
         
         self.check_bar_config()
         
@@ -141,9 +136,10 @@ class EnhancedPristonTaleBot:
     def check_bar_config(self):
         if hasattr(self.bar_selector_ui, 'get_configured_count'):
             configured = self.bar_selector_ui.get_configured_count()
+            total = self.bar_selector_ui.get_total_count()
             
             if configured > 0:
-                self.bot_controller.set_status(f"{configured}/4 bars configured")
+                self.bot_controller.set_status(f"{configured}/{total} bars configured")
                 
             if configured >= 3:
                 self.bot_controller.enable_start_button()
@@ -152,7 +148,7 @@ class EnhancedPristonTaleBot:
                     self.log("All bars configured! Regular bot and Largato Hunt are available.")
                 else:
                     self.bot_controller.set_status("Ready to start (Largato Hunt requires skill bar)")
-                    self.log("Basic bars configured! Configure Largato skill bar for hunt feature.")
+                    self.log("Core bars configured! Configure Largato skill bar for hunt feature.")
                 logger.info("Bars configured, start button enabled")
             else:
                 self.bot_controller.disable_start_button()
@@ -190,9 +186,6 @@ class EnhancedPristonTaleBot:
         try:
             if hasattr(self.bot_controller, 'running') and self.bot_controller.running:
                 self.bot_controller.stop_bot()
-            
-            if hasattr(self.bot_controller, 'largato_running') and self.bot_controller.largato_running:
-                self.bot_controller.stop_largato_hunt()
                 
             self.save_config()
             logger.info("Configuration saved on exit")

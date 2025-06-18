@@ -1,8 +1,41 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import logging
+import time
 
 logger = logging.getLogger('PristonBot')
+
+LARGATO_AVAILABLE = True
+try:
+    from app.largato_hunt import LargatoHunter
+except ImportError:
+    class LargatoHunter:
+        def __init__(self, log_callback):
+            self.log_callback = log_callback
+            self.running = False
+            self.wood_stacks_destroyed = 0
+            self.current_round = 1
+            self.hp_potions_used = 0
+            self.mp_potions_used = 0
+            self.sp_potions_used = 0
+        
+        def start_hunt(self):
+            self.log_callback("ERROR: Largato Hunt module not available!")
+            return False
+        
+        def stop_hunt(self):
+            return True
+            
+        def set_skill_bar_selector(self, selector):
+            pass
+        
+        def set_potion_system(self, hp_bar, mp_bar, sp_bar, settings_provider):
+            pass
+        
+        def get_skill_percentage(self):
+            return 0
+    
+    LARGATO_AVAILABLE = False
 
 class BotControllerUI:
     def __init__(self, parent, root, hp_bar, mp_bar, sp_bar, largato_skill_bar, settings_ui, log_callback):
@@ -15,11 +48,14 @@ class BotControllerUI:
         self.settings_ui = settings_ui
         self.log_callback = log_callback
         
-        from app.bot.bot_core import BotCore
-        from app.bot.largato_controller import LargatoController
+        try:
+            from app.bot.bot_core import BotCore
+            self.bot_core = BotCore(hp_bar, mp_bar, sp_bar, settings_ui, log_callback)
+        except ImportError:
+            self.bot_core = None
+            logger.warning("BotCore not available")
         
-        self.bot_core = BotCore(hp_bar, mp_bar, sp_bar, settings_ui, log_callback)
-        self.largato_controller = LargatoController(largato_skill_bar, hp_bar, mp_bar, sp_bar, settings_ui, log_callback)
+        self.largato_hunter = LargatoHunter(self.log_callback)
         
         self.running = False
         self.largato_running = False
@@ -29,6 +65,14 @@ class BotControllerUI:
         self.sp_potions_used = 0
         self.spells_cast = 0
         self.start_time = None
+        
+        self.target_x_offset = 0
+        self.target_y_offset = 0
+        self.spells_cast_since_target_change = 0
+        
+        self.game_window = None
+        self.game_window_rect = None
+        self.game_hwnd = None
         
         self._create_ui()
         self._setup_keyboard_shortcuts()
@@ -133,8 +177,6 @@ class BotControllerUI:
         ttk.Label(largato_status_frame, textvariable=self.largato_round_var).pack(side=tk.LEFT)
     
     def _create_buttons(self):
-        from app.bot.largato_controller import LARGATO_AVAILABLE
-        
         button_frame = ttk.Frame(self.parent)
         button_frame.pack(fill=tk.X, pady=10)
         
@@ -179,8 +221,6 @@ class BotControllerUI:
         self.stop_button.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
     
     def _create_shortcut_info(self):
-        from app.bot.largato_controller import LARGATO_AVAILABLE
-        
         shortcut_frame = ttk.Frame(self.parent)
         shortcut_frame.pack(fill=tk.X, pady=5)
         
@@ -201,8 +241,10 @@ class BotControllerUI:
         self.root.bind("<Control-Shift-A>", lambda event: self._handle_start_shortcut())
         self.root.bind("<Control-Shift-b>", lambda event: self._handle_stop_shortcut())
         self.root.bind("<Control-Shift-B>", lambda event: self._handle_stop_shortcut())
-        self.root.bind("<Control-Shift-l>", lambda event: self._handle_largato_shortcut())
-        self.root.bind("<Control-Shift-L>", lambda event: self._handle_largato_shortcut())
+        
+        if LARGATO_AVAILABLE:
+            self.root.bind("<Control-Shift-l>", lambda event: self._handle_largato_shortcut())
+            self.root.bind("<Control-Shift-L>", lambda event: self._handle_largato_shortcut())
         
         logger.info("Keyboard shortcuts registered")
     
@@ -217,8 +259,6 @@ class BotControllerUI:
             self.stop_bot()
     
     def _handle_largato_shortcut(self):
-        from app.bot.largato_controller import LARGATO_AVAILABLE
-        
         if not LARGATO_AVAILABLE:
             self.log_callback("Largato Hunt not available - module not properly installed")
             return
@@ -232,7 +272,6 @@ class BotControllerUI:
     
     def start_bot(self):
         if self.largato_running:
-            from tkinter import messagebox
             messagebox.showwarning(
                 "Largato Hunt Running",
                 "Please stop Largato Hunt before starting the regular bot.",
@@ -244,14 +283,16 @@ class BotControllerUI:
             logger.info("Start button clicked, but bot is already running")
             return
         
+        if not self.bot_core:
+            self.log_callback("ERROR: Bot core not available!")
+            return
+        
         self.running = True
         self.bot_core.start()
         self._update_ui_for_running_state()
+        self._start_runtime_tracking()
     
     def start_largato_hunt(self):
-        from app.bot.largato_controller import LARGATO_AVAILABLE
-        from tkinter import messagebox
-        
         if not LARGATO_AVAILABLE:
             messagebox.showerror(
                 "Largato Hunt Not Available",
@@ -271,7 +312,7 @@ class BotControllerUI:
         if self.largato_running:
             return
         
-        if not self.largato_controller.is_skill_bar_configured():
+        if not self._is_skill_bar_configured():
             messagebox.showerror(
                 "Largato Skill Bar Not Configured",
                 "Please configure the Largato skill bar first.",
@@ -280,7 +321,19 @@ class BotControllerUI:
             return
         
         self.largato_running = True
-        success = self.largato_controller.start_hunt()
+        self.largato_round_var.set("1/4")
+        
+        self.largato_hunter.set_skill_bar_selector(self.largato_skill_bar)
+        
+        if LARGATO_AVAILABLE:
+            self.largato_hunter.set_potion_system(
+                self.hp_bar,
+                self.mp_bar,
+                self.sp_bar,
+                self.settings_ui
+            )
+        
+        success = self.largato_hunter.start_hunt()
         
         if success:
             self._update_ui_for_largato_state()
@@ -288,16 +341,39 @@ class BotControllerUI:
         else:
             self.largato_running = False
     
+    def _is_skill_bar_configured(self):
+        if not self.largato_skill_bar:
+            logger.debug("Largato skill bar is None")
+            return False
+        
+        if hasattr(self.largato_skill_bar, 'is_setup'):
+            result = self.largato_skill_bar.is_setup()
+            logger.debug(f"Largato skill bar is_setup() returned: {result}")
+            if result:
+                return True
+        
+        if hasattr(self.largato_skill_bar, 'x1'):
+            has_coords = (self.largato_skill_bar.x1 is not None and 
+                        self.largato_skill_bar.y1 is not None and
+                        self.largato_skill_bar.x2 is not None and
+                        self.largato_skill_bar.y2 is not None)
+            logger.debug(f"Largato skill bar coordinate check: {has_coords}")
+            return has_coords
+        
+        logger.debug("Largato skill bar has no recognizable setup method or coordinates")
+        return False
+    
     def stop_bot(self):
         stopped_something = False
         
         if self.running:
-            self.bot_core.stop()
+            if self.bot_core:
+                self.bot_core.stop()
             self.running = False
             stopped_something = True
         
         if self.largato_running:
-            self.largato_controller.stop_hunt()
+            self.largato_hunter.stop_hunt()
             self.largato_running = False
             stopped_something = True
         
@@ -308,27 +384,24 @@ class BotControllerUI:
         if not self.largato_running:
             return
         
-        self.largato_controller.stop_hunt()
+        self.largato_hunter.stop_hunt()
         self.largato_running = False
         self._update_ui_for_stopped_state()
     
     def _update_ui_for_running_state(self):
         self.start_button.config(state=tk.DISABLED, bg="#a0a0a0")
-        self.largato_button.config(state=tk.DISABLED, bg="#a0a0a0")
+        if LARGATO_AVAILABLE:
+            self.largato_button.config(state=tk.DISABLED, bg="#a0a0a0")
         self.stop_button.config(state=tk.NORMAL, bg="#F44336")
         self.status_var.set("Bot is running")
     
     def _update_ui_for_largato_state(self):
-        from app.bot.largato_controller import LARGATO_AVAILABLE
-        
         self.start_button.config(state=tk.DISABLED, bg="#a0a0a0")
         self.largato_button.config(text="STOP LARGATO\n(Ctrl+Shift+L)", bg="#F44336")
         self.stop_button.config(state=tk.NORMAL, bg="#F44336")
         self.status_var.set("Largato Hunt is running with potion support")
     
     def _update_ui_for_stopped_state(self):
-        from app.bot.largato_controller import LARGATO_AVAILABLE
-        
         self.stop_button.config(state=tk.DISABLED, bg="#a0a0a0")
         
         if LARGATO_AVAILABLE:
@@ -341,22 +414,39 @@ class BotControllerUI:
         
         self.status_var.set("All bots stopped")
     
+    def _start_runtime_tracking(self):
+        self.start_time = time.time()
+        self._update_runtime()
+    
+    def _update_runtime(self):
+        if self.running and self.start_time:
+            elapsed = time.time() - self.start_time
+            hours = int(elapsed // 3600)
+            minutes = int((elapsed % 3600) // 60)
+            seconds = int(elapsed % 60)
+            
+            self.runtime_var.set(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+            
+            self.root.after(1000, self._update_runtime)
+    
     def _start_largato_progress_monitoring(self):
         self._update_largato_progress()
     
     def _update_largato_progress(self):
-        if self.largato_running and self.largato_controller:
-            round_count = self.largato_controller.get_current_round()
+        if self.largato_running and self.largato_hunter:
+            round_count = self.largato_hunter.current_round
             self.largato_round_var.set(f"{round_count}/4")
             
-            skill_percentage = self.largato_controller.get_skill_percentage()
-            self.skill_value_var.set(f"{skill_percentage:.1f}%")
+            skill_percentage = 0
+            if self.largato_skill_bar and self._is_skill_bar_configured():
+                skill_percentage = self.largato_hunter.get_skill_percentage()
+                self.skill_value_var.set(f"{skill_percentage:.1f}%")
             
-            self.hp_potions_var.set(str(self.largato_controller.get_hp_potions_used()))
-            self.mp_potions_var.set(str(self.largato_controller.get_mp_potions_used()))
-            self.sp_potions_var.set(str(self.largato_controller.get_sp_potions_used()))
+            self.hp_potions_var.set(str(getattr(self.largato_hunter, 'hp_potions_used', 0)))
+            self.mp_potions_var.set(str(getattr(self.largato_hunter, 'mp_potions_used', 0)))
+            self.sp_potions_var.set(str(getattr(self.largato_hunter, 'sp_potions_used', 0)))
             
-            if not self.largato_controller.is_running():
+            if not self.largato_hunter.running:
                 self.largato_running = False
                 self._update_ui_for_stopped_state()
                 

@@ -251,6 +251,29 @@ class LargatoHunter:
         self.mp_potions_used = 0
         self.sp_potions_used = 0
         
+        self.movement_config = {
+            "round_1": {
+                "right_duration": 0.0,
+                "left_duration": 0.4,
+                "forward_presses": 0
+            },
+            "round_2": {
+                "right_duration": 22.0,
+                "left_duration": 0.4,
+                "forward_presses": 15
+            },
+            "round_3": {
+                "right_duration": 8.5,
+                "left_duration": 0.4,
+                "forward_presses": 8
+            },
+            "round_4": {
+                "right_duration": 16.0,
+                "left_duration": 0.4,
+                "forward_presses": 12
+            }
+        }
+    
     def set_potion_system(self, hp_bar, mp_bar, sp_bar, settings_provider):
         self.hp_bar_selector = hp_bar
         self.mp_bar_selector = mp_bar
@@ -364,38 +387,68 @@ class LargatoHunter:
         except Exception as e:
             self.logger.error(f"Error checking potions: {e}")
     
-    def improved_movement_right(self, phase_elapsed, movement_duration):
-        cycle_duration = 0.08
-        current_cycle = int(phase_elapsed / cycle_duration) % 10
+    def enhanced_movement_right(self, phase_elapsed, movement_duration, forward_presses):
+        """Enhanced right movement with proper forward movement and varied patterns"""
+        total_cycles = int(movement_duration / 0.08)
+        current_cycle = int(phase_elapsed / 0.08) % max(1, total_cycles)
         
-        if current_cycle == 0:
+        # More aggressive movement patterns
+        if current_cycle % 15 == 0:
+            # Every 15 cycles, do multiple forward presses
+            for _ in range(3):
+                press_key(None, 'up')
+                time.sleep(0.02)
+        elif current_cycle % 12 == 0:
+            # Occasional down movement for positioning
+            for _ in range(2):
+                press_key(None, 'down')
+                time.sleep(0.02)
+        elif current_cycle % 8 == 0:
+            # Regular forward movement
             press_key(None, 'up')
-            press_key(None, 'up')
-        elif current_cycle == 1:
-            pass
-        elif current_cycle == 2:
+            time.sleep(0.02)
+        elif current_cycle % 10 == 0:
+            # Slight down adjustment
             press_key(None, 'down')
-            press_key(None, 'down')
-            press_key(None, 'down')
-        elif current_cycle == 3:
-            pass
-        elif current_cycle == 4:
-            press_key(None, 'up')
-        elif current_cycle == 5:
-            pass
-        elif current_cycle == 6:
-            press_key(None, 'down')
-            press_key(None, 'down')
-        elif current_cycle == 7:
-            pass
-        elif current_cycle == 8:
-            press_key(None, 'up')
-        else:
-            pass
+            time.sleep(0.02)
         
-        time.sleep(0.01)
+        # Continuous right movement
         press_key(None, 'right')
-        time.sleep(0.01)
+        time.sleep(0.03)
+        
+        # Add extra forward presses based on round requirements
+        if current_cycle % 20 == 0 and forward_presses > 0:
+            additional_forward = min(forward_presses // 4, 5)
+            for _ in range(additional_forward):
+                press_key(None, 'up')
+                time.sleep(0.02)
+    
+    def perform_movement_sequence(self, round_num, phase_elapsed):
+        """Perform movement based on round-specific configuration"""
+        config = self.movement_config.get(f"round_{round_num}", self.movement_config["round_4"])
+        
+        right_duration = config["right_duration"]
+        left_duration = config["left_duration"]
+        forward_presses = config["forward_presses"]
+        
+        self.logger.debug(f"Round {round_num} movement: right={right_duration}s, left={left_duration}s, forward={forward_presses}")
+        
+        if phase_elapsed < right_duration:
+            self.enhanced_movement_right(phase_elapsed, right_duration, forward_presses)
+            return False  # Still moving right
+        else:
+            return True  # Right movement complete
+    
+    def perform_left_positioning(self, phase_elapsed, left_duration=0.4):
+        """Perform left positioning movement"""
+        if phase_elapsed < left_duration:
+            # More aggressive left movement
+            for _ in range(2):
+                press_key(None, 'left')
+                time.sleep(0.02)
+            return False
+        else:
+            return True
     
     def start_hunt(self):
         if self.running:
@@ -425,8 +478,8 @@ class LargatoHunter:
         self.hunt_thread.daemon = True
         self.hunt_thread.start()
         
-        self.log_callback("Advanced Largato Hunt started! Round 1 beginning...")
-        self.logger.info("Advanced Largato hunt thread started")
+        self.log_callback("Enhanced Largato Hunt started with improved movement!")
+        self.logger.info("Enhanced Largato hunt thread started")
         return True
     
     def stop_hunt(self):
@@ -446,13 +499,13 @@ class LargatoHunter:
             self.log_callback(f"Hunt stopped. Duration: {minutes}m {seconds}s, Round: {self.current_round}")
             self.log_callback(f"Potions used: HP({self.hp_potions_used}) MP({self.mp_potions_used}) SP({self.sp_potions_used})")
         
-        self.log_callback("Advanced Largato Hunt stopped!")
-        self.logger.info("Advanced Largato hunt stopped")
+        self.log_callback("Enhanced Largato Hunt stopped!")
+        self.logger.info("Enhanced Largato hunt stopped")
         return True
     
     def hunt_loop(self):
-        self.log_callback(f"Starting Advanced Largato Hunt Round {self.current_round}...")
-        self.logger.info("Advanced Largato hunt loop started")
+        self.log_callback(f"Starting Enhanced Largato Hunt Round {self.current_round} with improved movement...")
+        self.logger.info("Enhanced Largato hunt loop started")
         
         self.find_game_window()
         
@@ -472,7 +525,7 @@ class LargatoHunter:
                             self.log_callback("Initial preparation complete, selecting main skill...")
                             press_key(None, 'f1')
                             time.sleep(0.3)
-                            self.log_callback("Moving right to locate wood stacks...")
+                            self.log_callback(f"Round {self.current_round}: Moving right with enhanced movement...")
                             self.hunt_phase = "moving_right"
                         self.phase_start_time = current_time
                     else:
@@ -525,40 +578,26 @@ class LargatoHunter:
                         self.log_callback("Selecting main skill for Round 1...")
                         press_key(None, 'f1')
                         time.sleep(0.3)
-                        self.log_callback("Moving left to position for attack...")
+                        self.log_callback("Round 1: Moving left to position for attack...")
                         self.hunt_phase = "round1_moving_left"
                         self.phase_start_time = current_time
                 
                 elif self.hunt_phase == "round1_moving_left":
-                    if phase_elapsed < 0.4:
-                        time.sleep(0.1)
-                    else:
+                    if self.perform_left_positioning(phase_elapsed, 0.4):
                         self.log_callback("Round 1 positioning complete, beginning attack sequence...")
                         self.hunt_phase = "attacking"
                         self.phase_start_time = current_time
                         self.skill_detector.reset_for_new_round()
                 
                 elif self.hunt_phase == "moving_right":
-                    if self.current_round == 2:
-                        movement_duration = 20.0
-                    elif self.current_round == 3:
-                        movement_duration = 7.0
-                    else:
-                        movement_duration = 14.0
-                    
-                    if phase_elapsed < movement_duration:
-                        self.improved_movement_right(phase_elapsed, movement_duration)
-                    else:
-                        self.log_callback("Right movement complete, positioning for attack...")
+                    if self.perform_movement_sequence(self.current_round, phase_elapsed):
+                        self.log_callback(f"Round {self.current_round}: Right movement complete, positioning for attack...")
                         self.hunt_phase = "moving_left"
                         self.phase_start_time = current_time
                 
                 elif self.hunt_phase == "moving_left":
-                    if phase_elapsed < 0.4:
-                        press_key(None, 'left')
-                        time.sleep(0.1)
-                    else:
-                        self.log_callback("Positioning complete, beginning attack sequence...")
+                    if self.perform_left_positioning(phase_elapsed, 0.4):
+                        self.log_callback(f"Round {self.current_round}: Positioning complete, beginning attack sequence...")
                         self.hunt_phase = "attacking"
                         self.phase_start_time = current_time
                         self.skill_detector.reset_for_new_round()
@@ -568,7 +607,7 @@ class LargatoHunter:
                     time.sleep(0.5)
                     
                     if phase_elapsed >= 10.0:
-                        self.log_callback("Attack phase established, monitoring for round completion...")
+                        self.log_callback(f"Round {self.current_round}: Attack phase established, monitoring for completion...")
                         self.hunt_phase = "monitoring_skill"
                         self.phase_start_time = current_time
                         self.skill_detector.reset_for_new_round()
@@ -588,13 +627,29 @@ class LargatoHunter:
                         self.logger.warning("Could not capture skill bar image during monitoring")
                 
                 elif self.hunt_phase == "round_complete":
-                    movement_duration = 5.0
+                    forward_movement_duration = 6.0
                     
-                    if phase_elapsed < movement_duration:
-                        self.improved_movement_right(phase_elapsed, movement_duration)
+                    if phase_elapsed < forward_movement_duration:
+                        # Enhanced forward movement between rounds
+                        if phase_elapsed < 2.0:
+                            # First 2 seconds: aggressive forward movement
+                            for _ in range(3):
+                                press_key(None, 'up')
+                                time.sleep(0.02)
+                            time.sleep(0.1)
+                        elif phase_elapsed < 4.0:
+                            # Next 2 seconds: mixed forward/right movement
+                            press_key(None, 'up')
+                            time.sleep(0.02)
+                            press_key(None, 'right')
+                            time.sleep(0.02)
+                        else:
+                            # Final 2 seconds: prepare for next round
+                            press_key(None, 'up')
+                            time.sleep(0.05)
                     else:
                         self.current_round += 1
-                        self.log_callback(f"Advancing to Round {self.current_round}...")
+                        self.log_callback(f"Advancing to Round {self.current_round} with enhanced movement...")
                         
                         if self.current_round > 4:
                             self.log_callback("All 4 rounds completed successfully! Hunt finished.")
@@ -605,19 +660,19 @@ class LargatoHunter:
                         self.skill_detector.reset_for_new_round()
                 
             except Exception as e:
-                self.log_callback(f"Error in advanced hunt loop: {e}")
-                self.logger.error(f"Error in advanced hunt loop: {e}", exc_info=True)
+                self.log_callback(f"Error in enhanced hunt loop: {e}")
+                self.logger.error(f"Error in enhanced hunt loop: {e}", exc_info=True)
                 time.sleep(1.0)
         
         if self.current_round > 4:
             duration = time.time() - self.hunt_start_time
             minutes = int(duration // 60)
             seconds = int(duration % 60)
-            self.log_callback(f"Advanced Largato Hunt completed successfully! Duration: {minutes}m {seconds}s")
+            self.log_callback(f"Enhanced Largato Hunt completed successfully! Duration: {minutes}m {seconds}s")
             self.log_callback(f"Total potions used: HP({self.hp_potions_used}) MP({self.mp_potions_used}) SP({self.sp_potions_used})")
-            self.logger.info("Advanced Largato hunt completed successfully")
+            self.logger.info("Enhanced Largato hunt completed successfully")
         else:
-            self.log_callback("Advanced Largato Hunt stopped before completion.")
-            self.logger.info("Advanced Largato hunt stopped by user")
+            self.log_callback("Enhanced Largato Hunt stopped before completion.")
+            self.logger.info("Enhanced Largato hunt stopped by user")
         
         self.running = False

@@ -1,9 +1,3 @@
-"""
-Configuration Manager UI for the Priston Tale Potion Bot
----------------------------------------------------
-This module handles loading and saving configurations.
-"""
-
 import logging
 from PIL import ImageGrab
 from app.config import load_config, save_config
@@ -11,23 +5,12 @@ from app.config import load_config, save_config
 logger = logging.getLogger('PristonBot')
 
 class ConfigManagerUI:
-    """Class that handles configuration management UI functions"""
-    
     def __init__(self, bar_selector_ui, settings_ui, log_callback):
-        """
-        Initialize the configuration manager
-        
-        Args:
-            bar_selector_ui: Bar selector UI instance
-            settings_ui: Settings UI instance
-            log_callback: Function to call for logging
-        """
         self.bar_selector_ui = bar_selector_ui
         self.settings_ui = settings_ui
         self.log_callback = log_callback
     
     def save_bar_config(self):
-        """Save bar configuration to config file"""
         try:
             config = load_config()
             
@@ -104,7 +87,6 @@ class ConfigManagerUI:
             return False
     
     def load_bar_config(self):
-        """Load bar configuration from config file"""
         try:
             config = load_config()
             bars_config = config.get("bars", {})
@@ -230,8 +212,8 @@ class ConfigManagerUI:
             self.settings_ui.set_settings(config)
             
             if bars_configured > 0:
-                self.log_callback(f"Loaded {bars_configured}/3 bars from saved configuration")
-                logger.info(f"Loaded {bars_configured}/3 bars from saved configuration")
+                self.log_callback(f"Loaded {bars_configured}/3 core bars from saved configuration")
+                logger.info(f"Loaded {bars_configured}/3 core bars from saved configuration")
                 return True
             else:
                 logger.info("No bar configurations loaded")

@@ -10,7 +10,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 import json
 
-# Default configuration
 DEFAULT_CONFIG = {
     "potion_keys": {
         "health": "1",
@@ -26,7 +25,6 @@ DEFAULT_CONFIG = {
     "potion_cooldown": 3.0,
     "window_name": "Priston Tale",
     "debug_enabled": True,
-    # Spellcasting configuration with target zone
     "spellcasting": {
         "enabled": False,
         "spell_key": "F5",
@@ -44,18 +42,10 @@ DEFAULT_CONFIG = {
             "points": []
         }
     },
-    # Bar selection coordinates
     "bars": {
         "game_window": {
             "x1": None,
             "y1": None,
-            "x2": None,
-            "y2": None,
-            "configured": False
-        },
-        "largato_skill_bar": {
-            "x1": None,
-            "y1": None, 
             "x2": None,
             "y2": None,
             "configured": False
@@ -80,25 +70,27 @@ DEFAULT_CONFIG = {
             "x2": None,
             "y2": None,
             "configured": False
+        },
+        "largato_skill_bar": {
+            "x1": None,
+            "y1": None,
+            "x2": None,
+            "y2": None,
+            "configured": False
         }
     }
 }
 
 def setup_logging():
     """Set up logging configuration"""
-    # Create logs directory if it doesn't exist
     if not os.path.exists('logs'):
         os.makedirs('logs')
     
-    # Configure root logger
     logger = logging.getLogger('PristonBot')
     logger.setLevel(logging.INFO)
     
-    # Create formatters
     file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     
-    # Create handlers
-    # File handler with rotation
     log_file = os.path.join('logs', f'priston_bot_{time.strftime("%Y%m%d_%H%M%S")}.log')
     file_handler = RotatingFileHandler(
         log_file, 
@@ -108,19 +100,15 @@ def setup_logging():
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(file_formatter)
     
-    # Add handlers to logger
     logger.addHandler(file_handler)
     
-    # Debug mode setup
     if DEFAULT_CONFIG["debug_enabled"]:
-        # Add debug file handler
         debug_handler = logging.FileHandler(os.path.join('logs', f'debug_{time.strftime("%Y%m%d_%H%M%S")}.log'))
         debug_handler.setLevel(logging.DEBUG)
         debug_handler.setFormatter(file_formatter)
         logger.addHandler(debug_handler)
         logger.setLevel(logging.DEBUG)
         
-        # Add console handler
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG)
         console_handler.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
@@ -139,7 +127,6 @@ def load_config():
                 config = json.load(f)
                 logging.getLogger('PristonBot').info("Configuration loaded from file")
                 
-                # Check if random targeting config exists, add it if not (for backward compatibility)
                 if "spellcasting" not in config:
                     config["spellcasting"] = DEFAULT_CONFIG["spellcasting"]
                     logging.getLogger('PristonBot').info("Added missing spellcasting configuration")
@@ -151,7 +138,6 @@ def load_config():
                     logging.getLogger('PristonBot').info("Added missing random targeting configuration")
                     save_config(config)
                 
-                # Check if target zone settings exist, add them if not
                 if "target_zone" not in config["spellcasting"]:
                     config["spellcasting"]["target_zone"] = DEFAULT_CONFIG["spellcasting"]["target_zone"]
                     config["spellcasting"]["target_method"] = DEFAULT_CONFIG["spellcasting"]["target_method"]
@@ -159,17 +145,26 @@ def load_config():
                     logging.getLogger('PristonBot').info("Added missing target zone configuration")
                     save_config(config)
                 
-                # Check if bars config exists, add it if not (for backward compatibility)
                 if "bars" not in config:
                     config["bars"] = DEFAULT_CONFIG["bars"]
                     logging.getLogger('PristonBot').info("Added missing bars configuration")
+                    save_config(config)
+                
+                if "largato_skill_bar" not in config["bars"]:
+                    config["bars"]["largato_skill_bar"] = {
+                        "x1": None,
+                        "y1": None,
+                        "x2": None,
+                        "y2": None,
+                        "configured": False
+                    }
+                    logging.getLogger('PristonBot').info("Added missing largato_skill_bar configuration")
                     save_config(config)
                 
                 return config
         except Exception as e:
             logging.getLogger('PristonBot').error(f"Error loading configuration: {e}")
             
-    # Create default config
     save_config(DEFAULT_CONFIG)
     return DEFAULT_CONFIG
 
