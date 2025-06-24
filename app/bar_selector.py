@@ -1,7 +1,7 @@
 """
-Simplified Screen and Bar Selector for Priston Tale Potion Bot
---------------------------------------------------
-This module uses a direct full-screen selection approach to avoid window misalignment issues.
+Fixed Screen and Bar Selector for Priston Tale Potion Bot
+----------------------------------------------------------
+This module fixes high-DPI display issues and coordinate scaling problems.
 """
 
 import os
@@ -12,9 +12,11 @@ from PIL import ImageGrab, ImageTk, Image
 import numpy as np
 import cv2
 import time
+import ctypes
+from ctypes import wintypes
 
 class ScreenSelector:
-    """Class for selecting areas on the screen without relying on window detection"""
+    """Class for selecting areas on the screen with proper DPI handling"""
     
     def __init__(self, root):
         """
@@ -36,6 +38,41 @@ class ScreenSelector:
         self.selection_rect = None
         self.screenshot_tk = None
         self.preview_image = None
+        
+        # Get DPI scaling factor
+        self.dpi_scale = self._get_dpi_scale()
+        self.logger.info(f"DPI scaling factor: {self.dpi_scale}")
+    
+    def _get_dpi_scale(self):
+        """Get the DPI scaling factor for the current display"""
+        try:
+            # Get DPI awareness
+            user32 = ctypes.windll.user32
+            user32.SetProcessDPIAware()
+            
+            # Get actual screen dimensions
+            screen_width = user32.GetSystemMetrics(0)
+            screen_height = user32.GetSystemMetrics(1)
+            
+            # Get tkinter's reported screen dimensions
+            tk_width = self.root.winfo_screenwidth()
+            tk_height = self.root.winfo_screenheight()
+            
+            # Calculate scaling factor
+            scale_x = screen_width / tk_width if tk_width > 0 else 1.0
+            scale_y = screen_height / tk_height if tk_height > 0 else 1.0
+            
+            # Use the average or the maximum scale
+            scale = max(scale_x, scale_y)
+            
+            self.logger.debug(f"Screen dimensions - Real: {screen_width}x{screen_height}, Tkinter: {tk_width}x{tk_height}")
+            self.logger.debug(f"Scale factors - X: {scale_x}, Y: {scale_y}, Using: {scale}")
+            
+            return scale if scale > 0 else 1.0
+            
+        except Exception as e:
+            self.logger.error(f"Error getting DPI scale: {e}")
+            return 1.0
     
     def is_setup(self):
         """Check if the selection is configured"""
@@ -51,12 +88,30 @@ class ScreenSelector:
         Returns:
             True if successful
         """
+        # Validate coordinates are reasonable
+        max_reasonable_coord = 10000  # Reasonable maximum coordinate
+        
+        if any(coord > max_reasonable_coord for coord in [x1, y1, x2, y2]):
+            self.logger.warning(f"Coordinates seem too large (DPI scaling issue?): ({x1},{y1}) to ({x2},{y2})")
+            # Try to correct by dividing by common DPI scales
+            for scale in [1.25, 1.5, 2.0, 2.5, 3.0]:
+                corrected_coords = [int(coord / scale) for coord in [x1, y1, x2, y2]]
+                if all(coord <= max_reasonable_coord for coord in corrected_coords):
+                    x1, y1, x2, y2 = corrected_coords
+                    self.logger.info(f"Corrected coordinates by scale {scale}: ({x1},{y1}) to ({x2},{y2})")
+                    break
+            else:
+                self.logger.error("Could not correct coordinates - they remain too large")
+                return False
+        
         self.x1 = x1
         self.y1 = y1
         self.x2 = x2
         self.y2 = y2
         self.is_configured = True
-        self.logger.info(f"{self.title if hasattr(self, 'title') else 'Selection'} configured from saved coordinates: ({x1},{y1}) to ({x2},{y2})")
+        
+        title = getattr(self, 'title', 'Selection')
+        self.logger.info(f"{title} configured from saved coordinates: ({x1},{y1}) to ({x2},{y2})")
         return True
         
     def start_selection(self, title="Select Area", color="yellow"):
@@ -65,18 +120,62 @@ class ScreenSelector:
         self.title = title
         self.color = color
         
+        # Take a screenshot first to get actual dimensions
+        try:
+            screenshot = ImageGrab.grab()
+            actual_width, actual_height = screenshot.size
+            self.logger.debug(f"Screenshot captured: {actual_width}x{actual_height}")
+            
+            # Validate screenshot size is reasonable
+            if actual_width > 10000 or actual_height > 10000:
+                self.logger.warning(f"Screenshot dimensions seem too large: {actual_width}x{actual_height}")
+                # Try taking a smaller screenshot
+                try:
+                    # Get screen metrics directly from Windows API
+                    user32 = ctypes.windll.user32
+                    screen_width = user32.GetSystemMetrics(0)
+                    screen_height = user32.GetSystemMetrics(1)
+                    self.logger.info(f"Windows API screen size: {screen_width}x{screen_height}")
+                    
+                    if screen_width <= 8000 and screen_height <= 8000:  # Reasonable limits
+                        screenshot = ImageGrab.grab(bbox=(0, 0, screen_width, screen_height))
+                        actual_width, actual_height = screenshot.size
+                        self.logger.info(f"Corrected screenshot size: {actual_width}x{actual_height}")
+                except Exception as e:
+                    self.logger.error(f"Error getting corrected screenshot: {e}")
+                    return
+                    
+        except Exception as e:
+            self.logger.error(f"Error taking initial screenshot: {e}")
+            return
+        
         # Create selection window that covers the entire screen
         self.selection_window = tk.Toplevel(self.root)
         self.selection_window.title(title)
         self.selection_window.attributes('-fullscreen', True)
         self.selection_window.attributes('-alpha', 0.8)  # Semi-transparent
+        self.selection_window.attributes('-topmost', True)  # Keep on top
         self.selection_window.configure(bg='black')
         
-        # Take a screenshot of the entire screen
-        self.logger.debug("Taking screenshot for selection")
-        screenshot = ImageGrab.grab()
-        self.screenshot_tk = ImageTk.PhotoImage(screenshot)
-        self.full_screenshot = screenshot  # Save the full screenshot for later use
+        # Store the screenshot for later use
+        self.full_screenshot = screenshot
+        
+        # Resize screenshot for display if needed
+        display_width = min(actual_width, 3840)  # Max 4K width for display
+        display_height = min(actual_height, 2160)  # Max 4K height for display
+        
+        if actual_width > display_width or actual_height > display_height:
+            display_screenshot = screenshot.resize((display_width, display_height), Image.Resampling.LANCZOS)
+            self.logger.debug(f"Resized screenshot for display: {display_width}x{display_height}")
+        else:
+            display_screenshot = screenshot
+            
+        self.screenshot_tk = ImageTk.PhotoImage(display_screenshot)
+        
+        # Calculate scale factor for coordinate conversion
+        self.coord_scale_x = actual_width / display_width
+        self.coord_scale_y = actual_height / display_height
+        self.logger.debug(f"Coordinate scale factors: X={self.coord_scale_x}, Y={self.coord_scale_y}")
         
         # Create a canvas to display the screenshot and allow selection
         self.canvas = tk.Canvas(self.selection_window, cursor="cross")
@@ -90,16 +189,19 @@ class ScreenSelector:
         
         # Add instructions
         instruction_text = f"Click and drag to select the {title}. Press ESC to cancel."
+        text_y = 50
         self.canvas.create_text(
-            self.selection_window.winfo_screenwidth() // 2,
-            50,
+            display_width // 2,
+            text_y,
             text=instruction_text,
             fill="white",
             font=("Arial", 18),
+            tags="instruction"
         )
         
         # Bind escape key to cancel
         self.selection_window.bind("<Escape>", self._on_escape)
+        self.selection_window.focus_set()  # Ensure window can receive key events
         
     def _on_escape(self, event):
         """Handle escape key press"""
@@ -109,22 +211,23 @@ class ScreenSelector:
     def on_press(self, event):
         """Handle mouse button press"""
         self.is_selecting = True
-        self.x1 = event.x
-        self.y1 = event.y
-        self.logger.debug(f"Started selection at ({self.x1}, {self.y1})")
+        self.x1 = int(event.x * self.coord_scale_x)
+        self.y1 = int(event.y * self.coord_scale_y)
+        self.logger.debug(f"Started selection at canvas({event.x}, {event.y}) -> screen({self.x1}, {self.y1})")
         
-        # Create the selection rectangle
+        # Create the selection rectangle on canvas coordinates
         self.selection_rect = self.canvas.create_rectangle(
-            self.x1, self.y1, self.x1, self.y1, 
+            event.x, event.y, event.x, event.y, 
             outline=self.color, width=2
         )
         
     def on_drag(self, event):
         """Handle mouse drag"""
         if self.is_selecting:
-            self.x2 = event.x
-            self.y2 = event.y
-            self.canvas.coords(self.selection_rect, self.x1, self.y1, self.x2, self.y2)
+            # Update canvas rectangle
+            canvas_x1 = self.x1 / self.coord_scale_x
+            canvas_y1 = self.y1 / self.coord_scale_y
+            self.canvas.coords(self.selection_rect, canvas_x1, canvas_y1, event.x, event.y)
             
     def on_release(self, event):
         """Handle mouse button release"""
@@ -132,9 +235,9 @@ class ScreenSelector:
             return
             
         self.is_selecting = False
-        self.x2 = event.x
-        self.y2 = event.y
-        self.logger.debug(f"Completed selection to ({self.x2}, {self.y2})")
+        self.x2 = int(event.x * self.coord_scale_x)
+        self.y2 = int(event.y * self.coord_scale_y)
+        self.logger.debug(f"Completed selection to canvas({event.x}, {event.y}) -> screen({self.x2}, {self.y2})")
         
         # Ensure coordinates are ordered correctly (top-left to bottom-right)
         if self.x1 > self.x2:
@@ -143,12 +246,16 @@ class ScreenSelector:
             self.y1, self.y2 = self.y2, self.y1
             
         # Display selected area details
+        canvas_center_x = (self.x1 + self.x2) / 2 / self.coord_scale_x
+        canvas_center_y = (self.y2 / self.coord_scale_y) + 20
+        
         self.canvas.create_text(
-            (self.x1 + self.x2) // 2,
-            self.y2 + 20,
+            canvas_center_x,
+            canvas_center_y,
             text=f"Selected: ({self.x1}, {self.y1}) to ({self.x2}, {self.y2})",
             fill="white",
             font=("Arial", 12),
+            tags="selection_info"
         )
         
         # Check for valid selection size
@@ -163,9 +270,14 @@ class ScreenSelector:
             )
             self.logger.warning(f"User made a small selection: {width}x{height} pixels")
         
+        # Validate coordinates are reasonable
+        max_coord = 5000  # Reasonable maximum for modern displays
+        if any(coord > max_coord for coord in [self.x1, self.y1, self.x2, self.y2]):
+            self.logger.warning(f"Selection coordinates seem large: ({self.x1},{self.y1}) to ({self.x2},{self.y2})")
+        
         # Capture preview image of selected area
         try:
-            # Use the saved full screenshot to create the preview
+            # Use the original full screenshot to create the preview
             preview = self.full_screenshot.crop((self.x1, self.y1, self.x2, self.y2))
             self.preview_image = preview
             self.logger.debug(f"Captured preview image: {preview.width}x{preview.height}")
@@ -179,7 +291,6 @@ class ScreenSelector:
             # Special processing for vertical bars
             if preview.height > preview.width * 2:  # Likely a vertical bar
                 self.logger.info(f"Detected vertical bar")
-                # Rotate preview for display in UI
                 self.preview_image_rotated = preview.rotate(90, expand=True)
                 self.preview_image_rotated.save(f"{debug_dir}/{self.title.replace(' ', '_').lower()}_preview_rotated.png")
             else:
@@ -191,7 +302,7 @@ class ScreenSelector:
         # Ask for confirmation
         confirm = messagebox.askyesno(
             f"Confirm {self.title} Selection",
-            f"Is this the correct area for {self.title}?\nCoordinates: ({self.x1}, {self.y1}) to ({self.x2}, {self.y2})"
+            f"Is this the correct area for {self.title}?\nCoordinates: ({self.x1}, {self.y1}) to ({self.x2}, {self.y2})\nSize: {width}x{height} pixels"
         )
         
         if confirm:
@@ -201,12 +312,9 @@ class ScreenSelector:
         else:
             self.logger.info(f"{self.title} selection canceled, retrying")
             self.canvas.delete(self.selection_rect)
+            self.canvas.delete("selection_info")
             self.preview_image = None
             
-    def is_setup(self):
-        """Check if the selection is configured"""
-        return self.is_configured
-        
     def get_current_screenshot_region(self):
         """
         Capture a new screenshot of the selected region
@@ -219,7 +327,22 @@ class ScreenSelector:
             return None
             
         try:
+            # Validate coordinates before capture
+            if any(coord < 0 for coord in [self.x1, self.y1, self.x2, self.y2]):
+                self.logger.error(f"Invalid negative coordinates: ({self.x1},{self.y1}) to ({self.x2},{self.y2})")
+                return None
+                
+            if self.x2 <= self.x1 or self.y2 <= self.y1:
+                self.logger.error(f"Invalid coordinate order: ({self.x1},{self.y1}) to ({self.x2},{self.y2})")
+                return None
+            
             screenshot = ImageGrab.grab(bbox=(self.x1, self.y1, self.x2, self.y2))
+            
+            # Validate screenshot
+            if screenshot.size[0] == 0 or screenshot.size[1] == 0:
+                self.logger.error(f"Screenshot has zero dimensions: {screenshot.size}")
+                return None
+                
             return screenshot
         except Exception as e:
             self.logger.error(f"Error capturing region: {e}", exc_info=True)
@@ -252,8 +375,16 @@ class BarDetector:
             Percentage filled (0-100)
         """
         try:
+            if image is None:
+                self.logger.warning(f"Cannot detect {self.title} percentage: image is None")
+                return 100
+                
             # Convert PIL image to numpy array
             np_image = np.array(image)
+            
+            if np_image.size == 0:
+                self.logger.warning(f"Cannot detect {self.title} percentage: image is empty")
+                return 100
             
             # Convert to HSV for better color detection
             hsv_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2HSV)
@@ -296,22 +427,20 @@ class BarDetector:
             # Count non-zero pixels to determine percentage
             total_pixels = mask.shape[0] * mask.shape[1]
             if total_pixels == 0:
-                return 0
+                return 100
                 
             filled_pixels = cv2.countNonZero(mask)
             percentage = (filled_pixels / total_pixels) * 100
             
             self.logger.debug(f"{self.title} bar percentage: {percentage:.1f}%")
-            return percentage
+            return max(0, min(100, percentage))  # Clamp to 0-100 range
             
         except Exception as e:
             self.logger.error(f"Error detecting {self.title} bar percentage: {e}", exc_info=True)
             return 100  # Default to 100% (full) to avoid unnecessary potion use
-        
 
 
-
-# Define color ranges for Priston Tale Potion Botbars
+# Define color ranges for Priston Tale bars
 # HSV color ranges [hue, saturation, value]
 HEALTH_COLOR_RANGE = (
     np.array([0, 50, 50]),       # Lower bound for red
