@@ -52,6 +52,7 @@ class EnhancedScreenSelector:
         self.color = "yellow"
         
         self.completion_callback = None
+        self.desktop_bounds = None
         
         try:
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
@@ -145,6 +146,21 @@ class EnhancedScreenSelector:
             monitor.index = i
         
         return monitors
+    
+    def _get_desktop_bounds(self, monitors):
+        if not monitors:
+            return 0, 0, 1920, 1080
+            
+        min_x = min(m.x for m in monitors)
+        min_y = min(m.y for m in monitors)
+        max_x = max(m.x + m.width for m in monitors)
+        max_y = max(m.y + m.height for m in monitors)
+        
+        width = max_x - min_x
+        height = max_y - min_y
+        
+        self.logger.info(f"Desktop bounds: ({min_x}, {min_y}) to ({max_x}, {max_y}) = {width}x{height}")
+        return min_x, min_y, width, height
     
     def _select_monitor(self, monitors):
         if len(monitors) == 1:
@@ -240,6 +256,7 @@ class EnhancedScreenSelector:
                 return False
                 
             self.logger.info(f"Selected: {self.selected_monitor}")
+            self.desktop_bounds = self._get_desktop_bounds(monitors)
             return self._create_selection_window()
             
         except Exception as e:
@@ -253,67 +270,96 @@ class EnhancedScreenSelector:
                 self.selection_window.destroy()
                 
             self.selection_window = tk.Toplevel(self.root)
-            self.selection_window.attributes('-fullscreen', True)
-            self.selection_window.attributes('-alpha', 0.8)
-            self.selection_window.attributes('-topmost', True)
-            self.selection_window.configure(bg='black')
+            self.selection_window.withdraw()
             
-            monitor = self.selected_monitor
-            self.selection_window.geometry(f"{monitor.width}x{monitor.height}+{monitor.x}+{monitor.y}")
+            desktop_x, desktop_y, desktop_width, desktop_height = self.desktop_bounds
+            
+            self.logger.info(f"Creating selection window with desktop bounds: {self.desktop_bounds}")
             
             try:
-                screenshot = ImageGrab.grab(bbox=(monitor.x, monitor.y, monitor.x + monitor.width, monitor.y + monitor.height), all_screens=True)
-            except TypeError:
-                screenshot = ImageGrab.grab(bbox=(monitor.x, monitor.y, monitor.x + monitor.width, monitor.y + monitor.height))
+                screenshot = ImageGrab.grab(all_screens=True)
+                self.logger.info(f"Screenshot captured with size: {screenshot.size}")
+            except Exception as e:
+                self.logger.error(f"Failed to capture screenshot: {e}")
+                return False
+            
+            if screenshot.size != (desktop_width, desktop_height):
+                self.logger.info(f"Screenshot size {screenshot.size} != expected {desktop_width}x{desktop_height}, adjusting")
+                try:
+                    if screenshot.size[0] >= desktop_width and screenshot.size[1] >= desktop_height:
+                        screenshot = screenshot.crop((0, 0, desktop_width, desktop_height))
+                    else:
+                        screenshot = screenshot.resize((desktop_width, desktop_height), Image.Resampling.LANCZOS)
+                except Exception as resize_error:
+                    self.logger.warning(f"Failed to resize screenshot: {resize_error}")
             
             self.screenshot_tk = ImageTk.PhotoImage(screenshot)
             
+            self.selection_window.overrideredirect(True)
+            self.selection_window.attributes('-alpha', 0.8)
+            self.selection_window.attributes('-topmost', True)
+            self.selection_window.configure(bg='black')
+            self.selection_window.geometry(f"{desktop_width}x{desktop_height}+{desktop_x}+{desktop_y}")
+            
             self.canvas = tk.Canvas(
                 self.selection_window, 
-                cursor="cross",
+                cursor="crosshair",
                 highlightthickness=0,
-                width=monitor.width,
-                height=monitor.height,
-                bg='black'
+                bg='black',
+                width=desktop_width,
+                height=desktop_height
             )
             self.canvas.pack(fill=tk.BOTH, expand=True)
             
             self.canvas.create_image(0, 0, image=self.screenshot_tk, anchor=tk.NW)
             
-            self.canvas.create_text(
-                monitor.width // 2,
-                50,
-                text=f"Select {self.title}",
-                fill="white",
-                font=("Arial", 20, "bold")
-            )
+            monitor = self.selected_monitor
+            text_x = monitor.x - desktop_x + monitor.width // 2
+            text_y = monitor.y - desktop_y + 50
             
-            self.canvas.create_text(
-                monitor.width // 2,
-                90,
-                text="Click and drag to select area",
-                fill="yellow",
-                font=("Arial", 16)
-            )
-            
-            self.canvas.create_text(
-                monitor.width // 2,
-                130,
-                text="ESC to cancel",
-                fill="white",
-                font=("Arial", 14)
-            )
+            if text_x >= 0 and text_y >= 0 and text_x < desktop_width and text_y < desktop_height:
+                self.canvas.create_rectangle(
+                    monitor.x - desktop_x, monitor.y - desktop_y,
+                    monitor.x - desktop_x + monitor.width, monitor.y - desktop_y + monitor.height,
+                    outline="cyan", width=3, dash=(8, 4)
+                )
+                
+                self.canvas.create_text(
+                    text_x, text_y,
+                    text=f"Select {self.title} (Monitor {monitor.index + 1})",
+                    fill="white",
+                    font=("Arial", 20, "bold")
+                )
+                
+                self.canvas.create_text(
+                    text_x, text_y + 40,
+                    text="Click and drag to select area anywhere on desktop",
+                    fill="yellow",
+                    font=("Arial", 16)
+                )
+                
+                self.canvas.create_text(
+                    text_x, text_y + 80,
+                    text="ESC to cancel",
+                    fill="white",
+                    font=("Arial", 14)
+                )
             
             self.canvas.bind("<Button-1>", self._on_click)
             self.canvas.bind("<B1-Motion>", self._on_drag)
             self.canvas.bind("<ButtonRelease-1>", self._on_release)
             
             self.selection_window.bind("<Escape>", self._on_escape)
+            self.selection_window.bind("<Key>", self._on_key)
+            
+            self.selection_window.deiconify()
             self.selection_window.focus_force()
+            self.selection_window.grab_set()
             
             self.start_x = None
             self.start_y = None
             
+            self.logger.info("Selection window created and displayed successfully")
             return True
             
         except Exception as e:
@@ -321,10 +367,11 @@ class EnhancedScreenSelector:
             return False
     
     def _on_click(self, event):
-        self.start_x = event.x + self.selected_monitor.x
-        self.start_y = event.y + self.selected_monitor.y
+        desktop_x, desktop_y, desktop_width, desktop_height = self.desktop_bounds
+        self.start_x = event.x + desktop_x
+        self.start_y = event.y + desktop_y
         
-        self.logger.debug(f"Click at canvas ({event.x}, {event.y}) -> global ({self.start_x}, {self.start_y})")
+        self.logger.info(f"Click registered: canvas ({event.x}, {event.y}) -> global ({self.start_x}, {self.start_y})")
         
         if self.selection_rect:
             self.canvas.delete(self.selection_rect)
@@ -332,17 +379,19 @@ class EnhancedScreenSelector:
             
     def _on_drag(self, event):
         if self.start_x is None or self.start_y is None:
+            self.logger.warning(f"Drag event but no start coordinates")
             return
             
-        current_x = event.x + self.selected_monitor.x
-        current_y = event.y + self.selected_monitor.y
+        desktop_x, desktop_y, desktop_width, desktop_height = self.desktop_bounds
+        current_x = event.x + desktop_x
+        current_y = event.y + desktop_y
         
         if self.selection_rect:
             self.canvas.delete(self.selection_rect)
         self.canvas.delete("size_info")
         
-        canvas_x1 = self.start_x - self.selected_monitor.x
-        canvas_y1 = self.start_y - self.selected_monitor.y
+        canvas_x1 = self.start_x - desktop_x
+        canvas_y1 = self.start_y - desktop_y
         canvas_x2 = event.x
         canvas_y2 = event.y
         
@@ -372,8 +421,9 @@ class EnhancedScreenSelector:
             self.logger.warning("Mouse release without valid start coordinates")
             return
             
-        end_x = event.x + self.selected_monitor.x
-        end_y = event.y + self.selected_monitor.y
+        desktop_x, desktop_y, desktop_width, desktop_height = self.desktop_bounds
+        end_x = event.x + desktop_x
+        end_y = event.y + desktop_y
         
         self.x1 = min(self.start_x, end_x)
         self.y1 = min(self.start_y, end_y)
@@ -382,6 +432,8 @@ class EnhancedScreenSelector:
         
         width = abs(self.x2 - self.x1)
         height = abs(self.y2 - self.y1)
+        
+        self.logger.info(f"Selection complete: ({self.x1}, {self.y1}) to ({self.x2}, {self.y2}), size: {width}x{height}")
         
         if width < 3 or height < 3:
             self.logger.warning("Selection too small, ignoring")
@@ -400,6 +452,10 @@ class EnhancedScreenSelector:
         if self.selection_window:
             self.selection_window.destroy()
             self.selection_window = None
+    
+    def _on_key(self, event):
+        if event.keysym == 'Escape':
+            self._on_escape(event)
     
     def _show_confirm_dialog(self):
         if not all([self.x1, self.y1, self.x2, self.y2]):
