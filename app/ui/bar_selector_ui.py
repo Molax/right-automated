@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk
 import logging
 from PIL import ImageTk, Image
-from app.bar_selector import ScreenSelector
 
 logger = logging.getLogger('PristonBot')
 
@@ -12,6 +11,15 @@ class BarSelectorUI:
         self.root = root
         self.log_callback = log_callback
         self.logger = logging.getLogger('PristonBot')
+        
+        try:
+            from app.bar_selector.screen_selector import ScreenSelector
+        except ImportError:
+            try:
+                from app.bar_selector import ScreenSelector
+            except ImportError:
+                self.log_callback("ERROR: Could not import ScreenSelector")
+                raise ImportError("ScreenSelector not found")
         
         self.hp_bar_selector = ScreenSelector(root)
         self.mp_bar_selector = ScreenSelector(root)
@@ -38,7 +46,7 @@ class BarSelectorUI:
         self.hp_preview_label.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
         
         ttk.Button(hp_frame, text="Select Health Bar", 
-                  command=lambda: self.start_bar_selection("Health", "red")).pack(
+                  command=self._select_health_bar).pack(
                       fill=tk.X, padx=5, pady=5)
         
         mp_frame = ttk.LabelFrame(bars_container, text="Mana Bar")
@@ -49,7 +57,7 @@ class BarSelectorUI:
         self.mp_preview_label.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
         
         ttk.Button(mp_frame, text="Select Mana Bar", 
-                  command=lambda: self.start_bar_selection("Mana", "blue")).pack(
+                  command=self._select_mana_bar).pack(
                       fill=tk.X, padx=5, pady=5)
         
         sp_frame = ttk.LabelFrame(bars_container, text="Stamina Bar")
@@ -60,7 +68,7 @@ class BarSelectorUI:
         self.sp_preview_label.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
         
         ttk.Button(sp_frame, text="Select Stamina Bar", 
-                  command=lambda: self.start_bar_selection("Stamina", "green")).pack(
+                  command=self._select_stamina_bar).pack(
                       fill=tk.X, padx=5, pady=5)
         
         largato_frame = ttk.LabelFrame(bars_container, text="Largato Skill")
@@ -74,7 +82,7 @@ class BarSelectorUI:
         self.largato_preview_label.pack(side=tk.LEFT, padx=5)
         
         ttk.Button(largato_content, text="Select Largato Skill Bar", 
-                  command=lambda: self.start_bar_selection("Largato Skill", "orange")).pack(
+                  command=self._select_largato_skill).pack(
                       side=tk.LEFT, padx=5)
         
         ttk.Label(largato_content, text="(Required for Largato Hunt)", 
@@ -91,25 +99,47 @@ class BarSelectorUI:
         bars_container.grid_rowconfigure(0, weight=1)
         bars_container.grid_rowconfigure(1, weight=0)
     
-    def start_bar_selection(self, bar_type, color):
-        if bar_type == "Health":
-            self.hp_bar_selector = ScreenSelector(self.root)
-            self.hp_bar_selector.start_selection(title=f"{bar_type} Bar", color=color)
-            self.root.after(1000, lambda: self.update_preview_image(self.hp_bar_selector, self.hp_preview_label))
-        elif bar_type == "Mana":
-            self.mp_bar_selector = ScreenSelector(self.root)
-            self.mp_bar_selector.start_selection(title=f"{bar_type} Bar", color=color)
-            self.root.after(1000, lambda: self.update_preview_image(self.mp_bar_selector, self.mp_preview_label))
-        elif bar_type == "Stamina":
-            self.sp_bar_selector = ScreenSelector(self.root)
-            self.sp_bar_selector.start_selection(title=f"{bar_type} Bar", color=color)
-            self.root.after(1000, lambda: self.update_preview_image(self.sp_bar_selector, self.sp_preview_label))
-        elif bar_type == "Largato Skill":
-            self.largato_skill_selector = ScreenSelector(self.root)
-            self.largato_skill_selector.start_selection(title=f"{bar_type} Bar", color=color)
-            self.root.after(1000, lambda: self.update_preview_image(self.largato_skill_selector, self.largato_preview_label))
+    def _select_health_bar(self):
+        self.log_callback("Starting health_bar selection...")
+        self.start_bar_selection("Health", "red", self.hp_bar_selector, self.hp_preview_label)
+    
+    def _select_mana_bar(self):
+        self.log_callback("Starting mana_bar selection...")
+        self.start_bar_selection("Mana", "blue", self.mp_bar_selector, self.mp_preview_label)
+    
+    def _select_stamina_bar(self):
+        self.log_callback("Starting stamina_bar selection...")
+        self.start_bar_selection("Stamina", "green", self.sp_bar_selector, self.sp_preview_label)
+    
+    def _select_largato_skill(self):
+        self.log_callback("Starting largato_skill selection...")
+        self.start_bar_selection("Largato Skill", "purple", self.largato_skill_selector, self.largato_preview_label)
+    
+    def start_bar_selection(self, bar_type, color, selector, preview_label):
+        self.log_callback(f"Starting {bar_type} bar selection with {color} overlay...")
         
-        self.root.after(1500, self.update_status)
+        def on_selection_complete():
+            try:
+                self.update_preview_image(selector, preview_label)
+                self.update_status()
+                self.log_callback(f"{bar_type} bar selection completed successfully")
+            except Exception as e:
+                self.logger.error(f"Error in completion callback: {e}")
+                self.log_callback(f"Error completing {bar_type} selection: {e}")
+        
+        try:
+            success = selector.start_selection(
+                title=f"{bar_type} Bar", 
+                color=color, 
+                completion_callback=on_selection_complete
+            )
+            
+            if not success:
+                self.log_callback(f"Failed to start {bar_type} selection")
+                
+        except Exception as e:
+            self.logger.error(f"Error starting {bar_type} selection: {e}")
+            self.log_callback(f"Failed to start {bar_type} selection: {e}")
     
     def update_preview_image(self, selector, label):
         if selector.is_setup():
@@ -118,46 +148,92 @@ class BarSelectorUI:
                     preview_img = selector.preview_image
                     
                     preview_size = (100, 60)
-                    resized_img = preview_img.resize(preview_size, Image.LANCZOS)
-                    preview_photo = ImageTk.PhotoImage(resized_img)
-                    label.config(image=preview_photo, text="")
-                    label.image = preview_photo
+                    if preview_img.width > preview_size[0] or preview_img.height > preview_size[1]:
+                        preview_img = preview_img.resize(preview_size, Image.Resampling.LANCZOS)
                     
-                    self.log_callback(f"{selector.title} selected: ({selector.x1},{selector.y1}) to ({selector.x2},{selector.y2})")
-                    self.update_status()
+                    photo = ImageTk.PhotoImage(preview_img)
+                    label.configure(image=photo, text="")
+                    label.image = photo
+                    
+                    self.logger.info(f"Updated preview image for {getattr(selector, 'title', 'bar')}")
                     
                 except Exception as e:
-                    logger.error(f"Error displaying preview image: {e}")
-                    label.config(text=f"Selected: ({selector.x1},{selector.y1}) to ({selector.x2},{selector.y2})")
+                    self.logger.error(f"Error updating preview image: {e}")
+                    label.configure(text="Preview Error", image="")
             else:
-                label.config(text=f"Selected: ({selector.x1},{selector.y1}) to ({selector.x2},{selector.y2})")
+                try:
+                    if all([selector.x1, selector.y1, selector.x2, selector.y2]):
+                        from PIL import ImageGrab
+                        preview_img = ImageGrab.grab(bbox=(selector.x1, selector.y1, selector.x2, selector.y2), all_screens=True)
+                        
+                        preview_size = (100, 60)
+                        if preview_img.width > preview_size[0] or preview_img.height > preview_size[1]:
+                            preview_img = preview_img.resize(preview_size, Image.Resampling.LANCZOS)
+                        
+                        photo = ImageTk.PhotoImage(preview_img)
+                        label.configure(image=photo, text="")
+                        label.image = photo
+                        
+                        selector.preview_image = preview_img
+                        
+                        self.logger.info(f"Created and updated preview image for {getattr(selector, 'title', 'bar')}")
+                        
+                except Exception as e:
+                    self.logger.error(f"Error creating preview image: {e}")
+                    label.configure(text="✓ Selected", image="")
         else:
-            label.config(text="Not Selected")
-            self.root.after(1000, lambda: self.update_preview_image(selector, label))
+            label.configure(text="Not Selected", image="")
     
     def update_status(self):
-        count = self.get_configured_count()
-        total_count = self.get_total_count()
-        self.status_var.set(f"Bars Configured: {count}/{total_count}")
+        configured = self.get_configured_count()
+        total = self.get_total_count()
+        self.status_var.set(f"Bars Configured: {configured}/{total}")
+        
+        self.logger.info(f"Bar configuration status: {configured}/{total}")
     
-    def is_bars_configured(self):
-        return (self.hp_bar_selector.is_setup() and 
-                self.mp_bar_selector.is_setup() and 
-                self.sp_bar_selector.is_setup())
-                
-    def is_all_bars_configured(self):
-        return (self.hp_bar_selector.is_setup() and 
-                self.mp_bar_selector.is_setup() and 
-                self.sp_bar_selector.is_setup() and
-                self.largato_skill_selector.is_setup())
-                
     def get_configured_count(self):
-        return sum([
-            self.hp_bar_selector.is_setup(),
-            self.mp_bar_selector.is_setup(),
-            self.sp_bar_selector.is_setup(),
-            self.largato_skill_selector.is_setup()
-        ])
+        count = 0
+        if self.hp_bar_selector.is_setup():
+            count += 1
+        if self.mp_bar_selector.is_setup():
+            count += 1
+        if self.sp_bar_selector.is_setup():
+            count += 1
+        if self.largato_skill_selector.is_setup():
+            count += 1
+        return count
     
     def get_total_count(self):
         return 4
+    
+    def get_bars_data(self):
+        return {
+            "health_bar": {
+                "x1": self.hp_bar_selector.x1,
+                "y1": self.hp_bar_selector.y1,
+                "x2": self.hp_bar_selector.x2,
+                "y2": self.hp_bar_selector.y2,
+                "configured": self.hp_bar_selector.is_setup()
+            },
+            "mana_bar": {
+                "x1": self.mp_bar_selector.x1,
+                "y1": self.mp_bar_selector.y1,
+                "x2": self.mp_bar_selector.x2,
+                "y2": self.mp_bar_selector.y2,
+                "configured": self.mp_bar_selector.is_setup()
+            },
+            "stamina_bar": {
+                "x1": self.sp_bar_selector.x1,
+                "y1": self.sp_bar_selector.y1,
+                "x2": self.sp_bar_selector.x2,
+                "y2": self.sp_bar_selector.y2,
+                "configured": self.sp_bar_selector.is_setup()
+            },
+            "largato_skill_bar": {
+                "x1": self.largato_skill_selector.x1,
+                "y1": self.largato_skill_selector.y1,
+                "x2": self.largato_skill_selector.x2,
+                "y2": self.largato_skill_selector.y2,
+                "configured": self.largato_skill_selector.is_setup()
+            }
+        }

@@ -1,386 +1,418 @@
 """
-Bar Selector Module - Simple Import Structure
-------------------------------------------
-Provides the main classes needed for bar selection.
+Bar Selector Module
+------------------
+Provides screen selection functionality for the Priston Tale Bot.
 """
 
 try:
     from .screen_selector import ScreenSelector
-    from .bar_detector import BarDetector
-    from .color_ranges import HEALTH_COLOR_RANGE, MANA_COLOR_RANGE, STAMINA_COLOR_RANGE
-except ImportError:
-    import os
-    import tkinter as tk
-    from tkinter import messagebox
+except ImportError as e:
     import logging
-    from PIL import ImageGrab, ImageTk, Image
-    import ctypes
-    import numpy as np
-    import cv2
-    import time
-    
     logger = logging.getLogger('PristonBot')
-
-    class ScreenSelector:
-        def __init__(self, root):
-            self.root = root
-            self.logger = logging.getLogger('PristonBot')
-            self.x1 = None
-            self.y1 = None
-            self.x2 = None
-            self.y2 = None
-            self.is_selecting = False
-            self.is_configured = False
-            self.selection_window = None
-            self.canvas = None
-            self.selection_rect = None
-            self.screenshot_tk = None
-            self.preview_image = None
-            self.title = "Selection"
-            self.color = "yellow"
-            
-            self.full_screenshot = None
-            self.window_offset_x = 0
-            self.window_offset_y = 0
-            
-        def is_setup(self):
-            return self.is_configured and all([
-                self.x1 is not None,
-                self.y1 is not None,
-                self.x2 is not None,
-                self.y2 is not None
-            ])
+    logger.warning(f"Could not import ScreenSelector from screen_selector: {e}")
+    
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        from PIL import ImageGrab, ImageTk, Image
+        import ctypes
+        import os
+        from ctypes import wintypes, Structure, c_wchar, sizeof, byref
         
-        def configure_from_saved(self, x1, y1, x2, y2):
-            if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
-                self.x1 = int(x1)
-                self.y1 = int(y1)
-                self.x2 = int(x2)
-                self.y2 = int(y2)
-                self.is_configured = True
+        class MONITORINFOEX(Structure):
+            _fields_ = [
+                ("cbSize", ctypes.c_uint32),
+                ("rcMonitor", wintypes.RECT),
+                ("rcWork", wintypes.RECT),
+                ("dwFlags", ctypes.c_uint32),
+                ("szDevice", c_wchar * 32)
+            ]
+
+        class MonitorInfo:
+            def __init__(self, index, x, y, width, height, is_primary=False):
+                self.index = index
+                self.x = x
+                self.y = y
+                self.width = width
+                self.height = height
+                self.is_primary = is_primary
                 
-                title = getattr(self, 'title', 'Selection')
-                self.logger.info(f"{title} configured from saved coordinates: ({self.x1},{self.y1}) to ({self.x2},{self.y2})")
-                return True
-            return False
-            
-        def start_selection(self, title="Select Area", color="yellow"):
-            self.logger.info(f"Starting selection: {title}")
-            self.title = title
-            self.color = color
-            
-            try:
-                screen_width = ctypes.windll.user32.GetSystemMetrics(0)
-                screen_height = ctypes.windll.user32.GetSystemMetrics(1)
+            def __str__(self):
+                primary_text = " (Primary)" if self.is_primary else ""
+                return f"Monitor {self.index + 1}{primary_text}: {self.width}x{self.height} at ({self.x}, {self.y})"
+
+        class ScreenSelector:
+            def __init__(self, root):
+                self.root = root
+                self.logger = logging.getLogger('PristonBot')
                 
-                self.full_screenshot = ImageGrab.grab(all_screens=True)
+                self.x1 = None
+                self.y1 = None
+                self.x2 = None
+                self.y2 = None
+                self.is_configured = False
                 
-                overlay_width = min(1200, int(screen_width * 0.8))
-                overlay_height = min(800, int(screen_height * 0.8))
-                
-                center_x = screen_width // 2
-                center_y = screen_height // 2
-                
-                window_x = center_x - overlay_width // 2
-                window_y = center_y - overlay_height // 2
-                
-                crop_x = max(0, window_x)
-                crop_y = max(0, window_y)
-                crop_right = min(self.full_screenshot.width, window_x + overlay_width)
-                crop_bottom = min(self.full_screenshot.height, window_y + overlay_height)
-                
-                display_screenshot = self.full_screenshot.crop((crop_x, crop_y, crop_right, crop_bottom))
-                
-                self.window_offset_x = crop_x
-                self.window_offset_y = crop_y
-                
-            except Exception as e:
-                self.logger.error(f"Error taking screenshot: {e}", exc_info=True)
-                messagebox.showerror("Error", f"Failed to capture screenshot: {e}")
-                return
-            
-            self.selection_window = tk.Toplevel(self.root)
-            self.selection_window.title(f"{title} - Click and drag to select")
-            
-            actual_width, actual_height = display_screenshot.size
-            
-            self.selection_window.geometry(f"{actual_width}x{actual_height}+{window_x}+{window_y}")
-            self.selection_window.resizable(False, False)
-            self.selection_window.attributes('-topmost', True)
-            self.selection_window.configure(bg='black')
-            
-            main_frame = tk.Frame(self.selection_window, bg='black')
-            main_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
-            
-            info_frame = tk.Frame(main_frame, bg='darkblue', height=40)
-            info_frame.pack(fill=tk.X, side=tk.TOP)
-            info_frame.pack_propagate(False)
-            
-            instruction_label = tk.Label(
-                info_frame,
-                text=f"Select {title} - Click and drag on the image below",
-                fg="white",
-                bg="darkblue",
-                font=("Arial", 12, "bold")
-            )
-            instruction_label.pack(expand=True)
-            
-            canvas_frame = tk.Frame(main_frame, bg='black')
-            canvas_frame.pack(fill=tk.BOTH, expand=True)
-            
-            self.canvas = tk.Canvas(
-                canvas_frame,
-                cursor="cross",
-                highlightthickness=1,
-                highlightbackground="yellow",
-                width=actual_width-4,
-                height=actual_height-44,
-                bg='black'
-            )
-            self.canvas.pack(padx=2, pady=2)
-            
-            self.screenshot_tk = ImageTk.PhotoImage(display_screenshot)
-            self.canvas.create_image(0, 0, image=self.screenshot_tk, anchor=tk.NW)
-            
-            self.canvas.bind("<ButtonPress-1>", self.on_press)
-            self.canvas.bind("<B1-Motion>", self.on_drag)
-            self.canvas.bind("<ButtonRelease-1>", self.on_release)
-            
-            button_frame = tk.Frame(main_frame, bg='darkgray', height=30)
-            button_frame.pack(fill=tk.X, side=tk.BOTTOM)
-            button_frame.pack_propagate(False)
-            
-            cancel_btn = tk.Button(
-                button_frame,
-                text="Cancel (ESC)",
-                command=self._cancel_selection,
-                bg="#f44336",
-                fg="white",
-                font=("Arial", 10)
-            )
-            cancel_btn.pack(side=tk.LEFT, padx=5, pady=3)
-            
-            help_label = tk.Label(
-                button_frame,
-                text="Focus on the bottom area where status bars are located",
-                fg="black",
-                bg="darkgray",
-                font=("Arial", 9)
-            )
-            help_label.pack(side=tk.RIGHT, padx=5, pady=3)
-            
-            self.selection_window.bind("<Escape>", lambda e: self._cancel_selection())
-            self.selection_window.focus_set()
-            self.selection_window.grab_set()
-            
-        def _cancel_selection(self):
-            self.logger.info(f"Selection canceled by user")
-            if self.selection_window:
-                self.selection_window.destroy()
                 self.selection_window = None
-            
-        def on_press(self, event):
-            self.is_selecting = True
-            
-            self.x1 = self.window_offset_x + event.x
-            self.y1 = self.window_offset_y + event.y
-            
-            self.selection_rect = self.canvas.create_rectangle(
-                event.x, event.y, event.x, event.y, 
-                outline=self.color, width=3
-            )
-            
-        def on_drag(self, event):
-            if self.is_selecting and self.selection_rect:
-                start_x = self.x1 - self.window_offset_x
-                start_y = self.y1 - self.window_offset_y
-                
-                canvas_width = self.canvas.winfo_width()
-                canvas_height = self.canvas.winfo_height()
-                
-                end_x = max(0, min(event.x, canvas_width))
-                end_y = max(0, min(event.y, canvas_height))
-                
-                self.canvas.coords(self.selection_rect, start_x, start_y, end_x, end_y)
-                
-        def on_release(self, event):
-            if not self.is_selecting:
-                return
-                
-            self.is_selecting = False
-            
-            self.x2 = self.window_offset_x + event.x
-            self.y2 = self.window_offset_y + event.y
-            
-            if self.x1 > self.x2:
-                self.x1, self.x2 = self.x2, self.x1
-            if self.y1 > self.y2:
-                self.y1, self.y2 = self.y2, self.y1
-                
-            width = self.x2 - self.x1
-            height = self.y2 - self.y1
-            
-            if width < 5 or height < 5:
-                messagebox.showwarning(
-                    "Invalid Selection",
-                    f"The selected area is too small ({width}x{height} pixels).\n"
-                    "Please select a larger area.",
-                    parent=self.selection_window
-                )
-                self.canvas.delete(self.selection_rect)
+                self.canvas = None
                 self.selection_rect = None
-                return
-            
-            try:
-                rel_x1 = self.x1
-                rel_y1 = self.y1
-                rel_x2 = self.x2
-                rel_y2 = self.y2
+                self.start_x = None
+                self.start_y = None
+                self.preview_image = None
+                self.selected_monitor = None
+                self.title = "Selection"
+                self.color = "yellow"
                 
-                rel_x1 = max(0, rel_x1)
-                rel_y1 = max(0, rel_y1)
-                rel_x2 = min(self.full_screenshot.width, rel_x2)
-                rel_y2 = min(self.full_screenshot.height, rel_y2)
+                self.completion_callback = None
                 
-                self.preview_image = self.full_screenshot.crop((rel_x1, rel_y1, rel_x2, rel_y2))
+            def is_setup(self):
+                return self.is_configured and all([
+                    self.x1 is not None,
+                    self.y1 is not None,
+                    self.x2 is not None,
+                    self.y2 is not None
+                ])
+            
+            def configure_from_saved(self, x1, y1, x2, y2):
+                if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
+                    self.x1 = int(x1)
+                    self.y1 = int(y1)
+                    self.x2 = int(x2)
+                    self.y2 = int(y2)
+                    self.is_configured = True
+                    
+                    title = getattr(self, 'title', 'Selection')
+                    self.logger.info(f"{title} configured from saved coordinates: ({self.x1},{self.y1}) to ({self.x2},{self.y2})")
+                    return True
+                return False
+            
+            def start_selection(self, title="Select Area", color="yellow", completion_callback=None):
+                self.logger.info(f"Starting selection: {title}")
+                self.title = title
+                self.color = color
+                self.completion_callback = completion_callback
                 
-                debug_dir = "debug_images"
-                if not os.path.exists(debug_dir):
-                    os.makedirs(debug_dir)
-                preview_path = f"{debug_dir}/{self.title.replace(' ', '_').lower()}_preview.png"
-                self.preview_image.save(preview_path)
-                self.logger.debug(f"Saved preview to {preview_path}")
+                try:
+                    monitors = self._get_monitors()
+                    self.logger.info(f"Detected {len(monitors)} monitor(s)")
+                    
+                    self.selected_monitor = self._select_monitor(monitors)
+                    
+                    if not self.selected_monitor:
+                        self.logger.info("Monitor selection cancelled")
+                        return False
+                        
+                    self.logger.info(f"Selected: {self.selected_monitor}")
+                    return self._create_selection_window()
+                    
+                except Exception as e:
+                    self.logger.error(f"Error starting selection: {e}", exc_info=True)
+                    messagebox.showerror("Error", f"Failed to start selection: {e}")
+                    return False
+            
+            def _get_monitors(self):
+                monitors = []
                 
-            except Exception as e:
-                self.logger.error(f"Error creating preview: {e}", exc_info=True)
+                def monitor_enum_proc(hMonitor, hdcMonitor, lprcMonitor, dwData):
+                    info = MONITORINFOEX()
+                    info.cbSize = sizeof(MONITORINFOEX)
+                    
+                    if ctypes.windll.user32.GetMonitorInfoW(hMonitor, byref(info)):
+                        rect = info.rcMonitor
+                        x = rect.left
+                        y = rect.top
+                        width = rect.right - rect.left
+                        height = rect.bottom - rect.top
+                        is_primary = bool(info.dwFlags & 1)
+                        
+                        monitor = MonitorInfo(len(monitors), x, y, width, height, is_primary)
+                        monitors.append(monitor)
+                        
+                        self.logger.info(f"Detected monitor {len(monitors)}: {width}x{height} at ({x},{y}) {'(Primary)' if is_primary else ''}")
+                        
+                    return True
+                
+                try:
+                    MonitorEnumProc = ctypes.WINFUNCTYPE(
+                        ctypes.c_bool,
+                        ctypes.c_ulong,
+                        ctypes.c_ulong,
+                        ctypes.POINTER(wintypes.RECT),
+                        ctypes.c_ulong
+                    )
+                    
+                    callback = MonitorEnumProc(monitor_enum_proc)
+                    ctypes.windll.user32.EnumDisplayMonitors(None, None, callback, 0)
+                except Exception as e:
+                    self.logger.error(f"Error enumerating monitors: {e}")
+                
+                if not monitors:
+                    try:
+                        width = ctypes.windll.user32.GetSystemMetrics(0)
+                        height = ctypes.windll.user32.GetSystemMetrics(1)
+                        monitors.append(MonitorInfo(0, 0, 0, width, height, True))
+                        self.logger.info(f"Fallback to primary monitor: {width}x{height}")
+                    except Exception as e:
+                        self.logger.error(f"Error getting system metrics: {e}")
+                        monitors.append(MonitorInfo(0, 0, 0, 1920, 1080, True))
+                
+                return monitors
             
-            self.selection_window.withdraw()
+            def _select_monitor(self, monitors):
+                if len(monitors) == 1:
+                    return monitors[0]
+                
+                dialog = tk.Toplevel(self.root)
+                dialog.title("Select Monitor")
+                dialog.geometry("400x300")
+                dialog.transient(self.root)
+                dialog.grab_set()
+                
+                selected_monitor = [None]
+                
+                tk.Label(dialog, text="Select monitor for screen capture:", font=("Arial", 12)).pack(pady=10)
+                
+                listbox = tk.Listbox(dialog, height=8)
+                listbox.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+                
+                for monitor in monitors:
+                    listbox.insert(tk.END, str(monitor))
+                
+                listbox.selection_set(0)
+                
+                def on_select():
+                    selection = listbox.curselection()
+                    if selection:
+                        selected_monitor[0] = monitors[selection[0]]
+                        dialog.destroy()
+                
+                def on_cancel():
+                    selected_monitor[0] = None
+                    dialog.destroy()
+                
+                button_frame = tk.Frame(dialog)
+                button_frame.pack(pady=10)
+                
+                tk.Button(button_frame, text="Select", command=on_select).pack(side=tk.LEFT, padx=5)
+                tk.Button(button_frame, text="Cancel", command=on_cancel).pack(side=tk.LEFT, padx=5)
+                
+                dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+                
+                self.root.wait_window(dialog)
+                return selected_monitor[0]
             
-            confirm = messagebox.askyesno(
-                f"Confirm {self.title} Selection",
-                f"Is this the correct area for {self.title}?\n\n"
-                f"Coordinates: ({self.x1}, {self.y1}) to ({self.x2}, {self.y2})\n"
-                f"Size: {width}x{height} pixels",
-                parent=self.root
-            )
+            def _create_selection_window(self):
+                try:
+                    if self.selection_window:
+                        self.selection_window.destroy()
+                        
+                    self.selection_window = tk.Toplevel(self.root)
+                    self.selection_window.attributes('-fullscreen', True)
+                    self.selection_window.attributes('-alpha', 0.3)
+                    self.selection_window.attributes('-topmost', True)
+                    self.selection_window.configure(bg='black')
+                    
+                    monitor = self.selected_monitor
+                    self.selection_window.geometry(f"{monitor.width}x{monitor.height}+{monitor.x}+{monitor.y}")
+                    
+                    try:
+                        screenshot = ImageGrab.grab(bbox=(monitor.x, monitor.y, monitor.x + monitor.width, monitor.y + monitor.height), all_screens=True)
+                    except:
+                        screenshot = ImageGrab.grab(bbox=(monitor.x, monitor.y, monitor.x + monitor.width, monitor.y + monitor.height))
+                    
+                    self.screenshot_tk = ImageTk.PhotoImage(screenshot)
+                    
+                    self.canvas = tk.Canvas(
+                        self.selection_window, 
+                        cursor="cross",
+                        highlightthickness=0,
+                        width=monitor.width,
+                        height=monitor.height,
+                        bg='black'
+                    )
+                    self.canvas.pack(fill=tk.BOTH, expand=True)
+                    
+                    self.canvas.create_image(0, 0, image=self.screenshot_tk, anchor=tk.NW)
+                    
+                    self.canvas.create_text(
+                        monitor.width // 2,
+                        30,
+                        text=f"Select {self.title} - Click and drag to select area",
+                        fill="yellow",
+                        font=("Arial", 14, "bold")
+                    )
+                    
+                    self.canvas.create_text(
+                        monitor.width // 2,
+                        60,
+                        text="ESC to cancel",
+                        fill="white",
+                        font=("Arial", 12)
+                    )
+                    
+                    self.canvas.bind("<Button-1>", self._on_click)
+                    self.canvas.bind("<B1-Motion>", self._on_drag)
+                    self.canvas.bind("<ButtonRelease-1>", self._on_release)
+                    
+                    self.selection_window.bind("<Escape>", self._on_escape)
+                    self.selection_window.focus_force()
+                    
+                    self.start_x = None
+                    self.start_y = None
+                    
+                    return True
+                    
+                except Exception as e:
+                    self.logger.error(f"Error creating selection window: {e}", exc_info=True)
+                    return False
             
-            if confirm:
-                self.is_configured = True
-                self.logger.info(f"{self.title} selection confirmed: ({self.x1}, {self.y1}) to ({self.x2}, {self.y2})")
+            def _on_click(self, event):
+                self.start_x = event.x + self.selected_monitor.x
+                self.start_y = event.y + self.selected_monitor.y
+                
+                if self.selection_rect:
+                    self.canvas.delete(self.selection_rect)
+                self.canvas.delete("size_info")
+                    
+            def _on_drag(self, event):
+                if self.start_x is None or self.start_y is None:
+                    return
+                    
+                current_x = event.x + self.selected_monitor.x
+                current_y = event.y + self.selected_monitor.y
+                
+                if self.selection_rect:
+                    self.canvas.delete(self.selection_rect)
+                self.canvas.delete("size_info")
+                
+                canvas_x1 = self.start_x - self.selected_monitor.x
+                canvas_y1 = self.start_y - self.selected_monitor.y
+                canvas_x2 = event.x
+                canvas_y2 = event.y
+                
+                self.selection_rect = self.canvas.create_rectangle(
+                    canvas_x1, canvas_y1, canvas_x2, canvas_y2,
+                    outline=self.color,
+                    width=3,
+                    fill="",
+                    dash=(8, 4)
+                )
+                
+                width = abs(current_x - self.start_x)
+                height = abs(current_y - self.start_y)
+                
+                if width > 5 and height > 5:
+                    self.canvas.create_text(
+                        (canvas_x1 + canvas_x2) / 2,
+                        (canvas_y1 + canvas_y2) / 2,
+                        text=f"{int(width)}×{int(height)}",
+                        fill="white",
+                        font=("Arial", 12, "bold"),
+                        tags="size_info"
+                    )
+            
+            def _on_release(self, event):
+                if self.start_x is None or self.start_y is None:
+                    return
+                    
+                end_x = event.x + self.selected_monitor.x
+                end_y = event.y + self.selected_monitor.y
+                
+                self.x1 = min(self.start_x, end_x)
+                self.y1 = min(self.start_y, end_y)
+                self.x2 = max(self.start_x, end_x)
+                self.y2 = max(self.start_y, end_y)
+                
+                width = abs(self.x2 - self.x1)
+                height = abs(self.y2 - self.y1)
+                
+                if width < 10 or height < 10:
+                    self.logger.warning("Selection too small, ignoring")
+                    if self.selection_rect:
+                        self.canvas.delete(self.selection_rect)
+                    self.canvas.delete("size_info")
+                    self.start_x = None
+                    self.start_y = None
+                    return
+                
+                self._show_confirm_dialog()
+            
+            def _on_escape(self, event):
+                self.logger.info("Selection cancelled by user (ESC key)")
                 if self.selection_window:
                     self.selection_window.destroy()
                     self.selection_window = None
-            else:
-                self.selection_window.deiconify()
-                self.canvas.delete(self.selection_rect)
-                self.selection_rect = None
-                self.preview_image = None
+            
+            def _show_confirm_dialog(self):
+                if not all([self.x1, self.y1, self.x2, self.y2]):
+                    return
                 
-        def get_current_screenshot_region(self):
-            if not self.is_configured:
-                self.logger.warning("Cannot capture region: not configured yet")
-                return None
-                
-            if not all([self.x1, self.y1, self.x2, self.y2]):
-                self.logger.warning("Cannot capture region: coordinates not set")
-                return None
-                
-            try:
-                if any(coord < -10000 or coord > 10000 for coord in [self.x1, self.y1, self.x2, self.y2]):
-                    self.logger.error(f"Coordinates out of reasonable range: ({self.x1},{self.y1}) to ({self.x2},{self.y2})")
-                    return None
-                    
-                if self.x2 <= self.x1 or self.y2 <= self.y1:
-                    self.logger.error(f"Invalid coordinate order: ({self.x1},{self.y1}) to ({self.x2},{self.y2})")
-                    return None
+                width = abs(self.x2 - self.x1)
+                height = abs(self.y2 - self.y1)
                 
                 try:
-                    screenshot = ImageGrab.grab(bbox=(self.x1, self.y1, self.x2, self.y2), all_screens=True)
-                except TypeError:
-                    screenshot = ImageGrab.grab(bbox=(self.x1, self.y1, self.x2, self.y2))
+                    self.preview_image = ImageGrab.grab(bbox=(self.x1, self.y1, self.x2, self.y2), all_screens=True)
+                    
+                    debug_dir = "debug_images"
+                    if not os.path.exists(debug_dir):
+                        os.makedirs(debug_dir)
+                    preview_path = f"{debug_dir}/{self.title.replace(' ', '_').lower()}_preview.png"
+                    self.preview_image.save(preview_path)
+                    
+                except Exception as e:
+                    self.logger.error(f"Error creating preview: {e}")
                 
-                if screenshot.size[0] == 0 or screenshot.size[1] == 0:
-                    self.logger.error(f"Screenshot has zero dimensions: {screenshot.size}")
+                self.selection_window.withdraw()
+                
+                confirm = messagebox.askyesno(
+                    f"Confirm {self.title} Selection",
+                    f"Is this the correct area for {self.title}?\n\n"
+                    f"Coordinates: ({self.x1}, {self.y1}) to ({self.x2}, {self.y2})\n"
+                    f"Size: {width}x{height} pixels",
+                    parent=self.root
+                )
+                
+                if confirm:
+                    self.is_configured = True
+                    self.logger.info(f"{self.title} selection confirmed")
+                    
+                    if self.selection_window:
+                        self.selection_window.destroy()
+                        self.selection_window = None
+                    
+                    if self.completion_callback:
+                        try:
+                            self.completion_callback()
+                        except Exception as e:
+                            self.logger.error(f"Error in completion callback: {e}")
+                else:
+                    self.selection_window.deiconify()
+                    if self.canvas and self.selection_rect:
+                        self.canvas.delete(self.selection_rect)
+                    self.canvas.delete("size_info")
+                    self.selection_rect = None
+                    self.preview_image = None
+                    self.start_x = None
+                    self.start_y = None
+            
+            def get_current_screenshot_region(self):
+                if not self.is_configured or not all([self.x1, self.y1, self.x2, self.y2]):
                     return None
                     
-                return screenshot
-            except Exception as e:
-                self.logger.error(f"Error capturing region: {e}", exc_info=True)
-                return None
+                try:
+                    screenshot = ImageGrab.grab(bbox=(self.x1, self.y1, self.x2, self.y2), all_screens=True)
+                    return screenshot
+                except Exception as e:
+                    self.logger.error(f"Error capturing region: {e}")
+                    return None
+        
+        logger.info("Using fallback ScreenSelector implementation")
+        
+    except Exception as e:
+        logger.error(f"Failed to create fallback ScreenSelector: {e}")
+        raise
 
-    class BarDetector:
-        def __init__(self, title, color_range):
-            self.title = title
-            self.color_range = color_range
-            self.logger = logging.getLogger('PristonBot')
-            
-        def detect_percentage(self, image):
-            try:
-                if image is None:
-                    self.logger.warning(f"Cannot detect {self.title} percentage: image is None")
-                    return 100
-                    
-                np_image = np.array(image)
-                
-                if np_image.size == 0:
-                    self.logger.warning(f"Cannot detect {self.title} percentage: image is empty")
-                    return 100
-                
-                hsv_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2HSV)
-                
-                if self.title == "Health":
-                    lower1 = np.array([0, 50, 50])
-                    upper1 = np.array([10, 255, 255])
-                    mask1 = cv2.inRange(hsv_image, lower1, upper1)
-                    
-                    lower2 = np.array([160, 50, 50])
-                    upper2 = np.array([180, 255, 255])
-                    mask2 = cv2.inRange(hsv_image, lower2, upper2)
-                    
-                    mask = mask1 | mask2
-                    
-                elif self.title == "Mana":
-                    lower = np.array([100, 50, 50])
-                    upper = np.array([140, 255, 255])
-                    mask = cv2.inRange(hsv_image, lower, upper)
-                    
-                else:
-                    lower = np.array([40, 50, 50])
-                    upper = np.array([80, 255, 255])
-                    mask = cv2.inRange(hsv_image, lower, upper)
-                
-                debug_dir = "debug_images"
-                if not os.path.exists(debug_dir):
-                    os.makedirs(debug_dir)
-                mask_filename = f"{debug_dir}/{self.title.lower()}_mask_{time.strftime('%H%M%S')}.png"
-                cv2.imwrite(mask_filename, mask)
-                
-                kernel = np.ones((3, 3), np.uint8)
-                mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-                mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-                
-                total_pixels = mask.shape[0] * mask.shape[1]
-                if total_pixels == 0:
-                    return 100
-                    
-                filled_pixels = cv2.countNonZero(mask)
-                percentage = (filled_pixels / total_pixels) * 100
-                
-                self.logger.debug(f"{self.title} bar percentage: {percentage:.1f}%")
-                return max(0, min(100, percentage))
-                
-            except Exception as e:
-                self.logger.error(f"Error detecting {self.title} bar percentage: {e}", exc_info=True)
-                return 100
-
-    HEALTH_COLOR_RANGE = (np.array([0, 50, 50]), np.array([10, 255, 255]))
-    MANA_COLOR_RANGE = (np.array([100, 50, 50]), np.array([140, 255, 255]))
-    STAMINA_COLOR_RANGE = (np.array([40, 50, 50]), np.array([80, 255, 255]))
-
-__all__ = [
-    'ScreenSelector',
-    'BarDetector',
-    'HEALTH_COLOR_RANGE',
-    'MANA_COLOR_RANGE',
-    'STAMINA_COLOR_RANGE'
-]
+try:
+    from .bar_detector import BarDetector
+    from .color_ranges import HEALTH_COLOR_RANGE, MANA_COLOR_RANGE, STAMINA_COLOR_RANGE
+except ImportError:
+    pass
