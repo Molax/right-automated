@@ -20,8 +20,8 @@ class PristonTaleBot:
             except (AttributeError, OSError):
                 pass
         
-        self.root.geometry("1200x800")
-        self.root.minsize(1000, 700)
+        self.root.geometry("1300x900")
+        self.root.minsize(1100, 800)
         self.root.title("Priston Tale Bot - Enhanced")
         self.root.configure(bg="#1a1a1a")
         
@@ -83,19 +83,39 @@ class PristonTaleBot:
         self.spells_cast = 0
     
     def _create_interface(self):
-        main_container = tk.Frame(self.root, bg="#1a1a1a")
-        main_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        main_canvas = tk.Canvas(self.root, bg="#1a1a1a", highlightthickness=0)
+        main_scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=main_canvas.yview)
+        scrollable_main = tk.Frame(main_canvas, bg="#1a1a1a")
+        
+        scrollable_main.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+        
+        main_canvas.create_window((0, 0), window=scrollable_main, anchor="nw")
+        main_canvas.configure(yscrollcommand=main_scrollbar.set)
+        
+        main_canvas.pack(side="left", fill="both", expand=True)
+        main_scrollbar.pack(side="right", fill="y")
+        
+        def _on_mousewheel(event):
+            main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        main_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        main_container = tk.Frame(scrollable_main, bg="#1a1a1a")
+        main_container.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
         
         self._create_header(main_container)
         self._create_content_area(main_container)
     
     def _create_header(self, parent):
-        header_frame = tk.Frame(parent, bg="#1a1a1a", height=80)
-        header_frame.pack(fill=tk.X, pady=(0, 15))
+        header_frame = tk.Frame(parent, bg="#1a1a1a", height=70)
+        header_frame.pack(fill=tk.X, pady=(0, 12))
         header_frame.pack_propagate(False)
         
         title_section = tk.Frame(header_frame, bg="#1a1a1a")
-        title_section.pack(side=tk.LEFT, fill=tk.Y, pady=10)
+        title_section.pack(side=tk.LEFT, fill=tk.Y, pady=8)
         
         title_label = tk.Label(title_section, text="Priston Tale Bot", 
                               font=("Segoe UI", 20, "bold"), bg="#1a1a1a", fg="#ffffff")
@@ -106,7 +126,7 @@ class PristonTaleBot:
         subtitle_label.pack(anchor=tk.W)
         
         status_section = tk.Frame(header_frame, bg="#1a1a1a")
-        status_section.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
+        status_section.pack(side=tk.RIGHT, fill=tk.Y, pady=8)
         
         status_frame = tk.Frame(status_section, bg="#1a1a1a")
         status_frame.pack(side=tk.RIGHT, padx=(20, 0))
@@ -132,11 +152,12 @@ class PristonTaleBot:
         content_frame.grid_columnconfigure(1, weight=1)
         
         left_panel = tk.Frame(content_frame, bg="#2d2d2d", relief=tk.FLAT, bd=1)
-        left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         left_panel.grid_rowconfigure(1, weight=1)
         
         right_panel = tk.Frame(content_frame, bg="#2d2d2d", relief=tk.FLAT, bd=1)
         right_panel.grid(row=0, column=1, sticky="nsew")
+        right_panel.grid_rowconfigure(0, weight=2)
         right_panel.grid_rowconfigure(1, weight=1)
         
         self._create_bar_selection_panel(left_panel)
@@ -145,18 +166,18 @@ class PristonTaleBot:
         self._create_controls_panel(right_panel)
     
     def _create_bar_selection_panel(self, parent):
-        bars_frame = tk.Frame(parent, bg="#2d2d2d", padx=15, pady=15)
-        bars_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        bars_frame = tk.Frame(parent, bg="#2d2d2d", padx=12, pady=12)
+        bars_frame.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         
         title_label = tk.Label(bars_frame, text="Bar Configuration", 
                               font=("Segoe UI", 14, "bold"), bg="#2d2d2d", fg="#ffffff")
-        title_label.pack(anchor=tk.W, pady=(0, 15))
+        title_label.pack(anchor=tk.W, pady=(0, 12))
         
         bars_grid = tk.Frame(bars_frame, bg="#2d2d2d")
         bars_grid.pack(fill=tk.X)
         
         main_bars = tk.Frame(bars_grid, bg="#2d2d2d")
-        main_bars.pack(fill=tk.X, pady=(0, 10))
+        main_bars.pack(fill=tk.X, pady=(0, 8))
         
         for i, (name, color, selector) in enumerate([
             ("Health Bar", "#dc3545", self.hp_bar_selector),
@@ -173,14 +194,14 @@ class PristonTaleBot:
         
         self.config_status_label = tk.Label(bars_frame, text="Configure bars to continue",
                                            font=("Segoe UI", 11), bg="#2d2d2d", fg="#ffc107")
-        self.config_status_label.pack(pady=(15, 0))
+        self.config_status_label.pack(pady=(12, 0))
     
     def _create_bar_card(self, parent, title, color, selector, row, col):
         card = tk.Frame(parent, bg="#3d3d3d", relief=tk.FLAT, bd=1)
-        card.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+        card.grid(row=row, column=col, padx=4, pady=4, sticky="nsew")
         
         header = tk.Frame(card, bg="#3d3d3d")
-        header.pack(fill=tk.X, padx=10, pady=(10, 5))
+        header.pack(fill=tk.X, padx=8, pady=(8, 4))
         
         title_label = tk.Label(header, text=title, font=("Segoe UI", 10, "bold"), 
                               bg="#3d3d3d", fg="#ffffff")
@@ -191,8 +212,8 @@ class PristonTaleBot:
         status_dot.pack(side=tk.RIGHT)
         setattr(selector, 'status_dot', status_dot)
         
-        preview_frame = tk.Frame(card, bg="#1a1a1a", height=60)
-        preview_frame.pack(fill=tk.X, padx=10, pady=5)
+        preview_frame = tk.Frame(card, bg="#1a1a1a", height=50)
+        preview_frame.pack(fill=tk.X, padx=8, pady=4)
         preview_frame.pack_propagate(False)
         
         preview_label = tk.Label(preview_frame, text="Not Configured",
@@ -201,7 +222,7 @@ class PristonTaleBot:
         setattr(selector, 'preview_label', preview_label)
         
         btn_frame = tk.Frame(card, bg="#3d3d3d")
-        btn_frame.pack(fill=tk.X, padx=10, pady=(5, 10))
+        btn_frame.pack(fill=tk.X, padx=8, pady=(4, 8))
         
         select_btn = tk.Button(btn_frame, text=f"Select {title}",
                              bg=color, fg="#ffffff", relief=tk.FLAT, borderwidth=0,
@@ -211,10 +232,10 @@ class PristonTaleBot:
     
     def _create_skill_card(self, parent):
         card = tk.Frame(parent, bg="#3d3d3d", relief=tk.FLAT, bd=1)
-        card.pack(fill=tk.X, padx=5, pady=5)
+        card.pack(fill=tk.X, padx=4, pady=4)
         
         header = tk.Frame(card, bg="#3d3d3d")
-        header.pack(fill=tk.X, padx=15, pady=(15, 10))
+        header.pack(fill=tk.X, padx=12, pady=(12, 8))
         
         title_label = tk.Label(header, text="Largato Skill Bar", 
                               font=("Segoe UI", 11, "bold"), bg="#3d3d3d", fg="#ffffff")
@@ -222,7 +243,7 @@ class PristonTaleBot:
         
         optional_label = tk.Label(header, text="(Optional - for Largato Hunt)", 
                                  font=("Segoe UI", 9), bg="#3d3d3d", fg="#ffc107")
-        optional_label.pack(side=tk.LEFT, padx=(10, 0))
+        optional_label.pack(side=tk.LEFT, padx=(8, 0))
         
         status_dot = tk.Label(header, text="●", font=("Segoe UI", 12), 
                              bg="#3d3d3d", fg="#dc3545")
@@ -230,10 +251,10 @@ class PristonTaleBot:
         setattr(self.largato_skill_selector, 'status_dot', status_dot)
         
         content = tk.Frame(card, bg="#3d3d3d")
-        content.pack(fill=tk.X, padx=15, pady=(0, 15))
+        content.pack(fill=tk.X, padx=12, pady=(0, 12))
         
-        preview_frame = tk.Frame(content, bg="#1a1a1a", width=120, height=50)
-        preview_frame.pack(side=tk.LEFT, padx=(0, 15))
+        preview_frame = tk.Frame(content, bg="#1a1a1a", width=100, height=40)
+        preview_frame.pack(side=tk.LEFT, padx=(0, 12))
         preview_frame.pack_propagate(False)
         
         preview_label = tk.Label(preview_frame, text="Not Configured",
@@ -248,13 +269,13 @@ class PristonTaleBot:
         select_btn.pack(side=tk.LEFT, fill=tk.X, expand=True)
     
     def _create_log_panel(self, parent):
-        log_frame = tk.Frame(parent, bg="#2d2d2d", padx=15, pady=15)
+        log_frame = tk.Frame(parent, bg="#2d2d2d", padx=12, pady=12)
         log_frame.grid(row=1, column=0, sticky="nsew")
         log_frame.grid_rowconfigure(1, weight=1)
         
         title_label = tk.Label(log_frame, text="Activity Log", 
                               font=("Segoe UI", 14, "bold"), bg="#2d2d2d", fg="#ffffff")
-        title_label.grid(row=0, column=0, sticky="w", pady=(0, 10))
+        title_label.grid(row=0, column=0, sticky="w", pady=(0, 8))
         
         self.log_text = scrolledtext.ScrolledText(
             log_frame, bg="#1a1a1a", fg="#ffffff", insertbackground="#ffffff",
@@ -264,40 +285,28 @@ class PristonTaleBot:
         self.log_text.grid(row=1, column=0, sticky="nsew")
     
     def _create_settings_panel(self, parent):
-        settings_frame = tk.Frame(parent, bg="#2d2d2d", padx=15, pady=15)
+        settings_frame = tk.Frame(parent, bg="#2d2d2d", padx=12, pady=12)
         settings_frame.grid(row=0, column=0, sticky="nsew")
         settings_frame.grid_rowconfigure(1, weight=1)
         
         title_label = tk.Label(settings_frame, text="Bot Settings", 
                               font=("Segoe UI", 14, "bold"), bg="#2d2d2d", fg="#ffffff")
-        title_label.grid(row=0, column=0, sticky="w", pady=(0, 10))
+        title_label.grid(row=0, column=0, sticky="w", pady=(0, 8))
         
-        canvas = tk.Canvas(settings_frame, bg="#2d2d2d", highlightthickness=0)
-        scrollbar = tk.Scrollbar(settings_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg="#2d2d2d")
+        settings_content = tk.Frame(settings_frame, bg="#2d2d2d")
+        settings_content.grid(row=1, column=0, sticky="nsew", pady=(0, 8))
         
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
-        scrollbar.grid(row=1, column=1, sticky="ns", pady=(0, 10))
-        
-        self._create_potion_settings(scrollable_frame)
-        self._create_behavior_settings(scrollable_frame)
-        self._create_spellcasting_settings(scrollable_frame)
+        self._create_potion_settings(settings_content)
+        self._create_behavior_settings(settings_content)
+        self._create_spellcasting_settings(settings_content)
     
     def _create_potion_settings(self, parent):
         frame = tk.LabelFrame(parent, text="Potion Settings", bg="#2d2d2d", fg="#ffffff", 
                              font=("Segoe UI", 10, "bold"))
-        frame.pack(fill=tk.X, padx=5, pady=(0, 10))
+        frame.pack(fill=tk.X, padx=4, pady=(0, 8))
         
         keys_frame = tk.Frame(frame, bg="#2d2d2d")
-        keys_frame.pack(fill=tk.X, padx=10, pady=10)
+        keys_frame.pack(fill=tk.X, padx=8, pady=8)
         
         for i, (name, color, default) in enumerate([
             ("HP:", "#dc3545", "1"),
@@ -307,16 +316,16 @@ class PristonTaleBot:
             keys_frame.grid_columnconfigure(i*2+1, weight=1)
             
             tk.Label(keys_frame, text=name, bg="#2d2d2d", fg=color,
-                    font=("Segoe UI", 9, "bold")).grid(row=0, column=i*2, sticky="e", padx=(0, 5))
+                    font=("Segoe UI", 9, "bold")).grid(row=0, column=i*2, sticky="e", padx=(0, 4))
             
             var = tk.StringVar(value=default)
             combo = ttk.Combobox(keys_frame, textvariable=var, 
                                values=["1", "2", "3", "4", "5"], state="readonly", width=4)
-            combo.grid(row=0, column=i*2+1, sticky="w", padx=(0, 15))
+            combo.grid(row=0, column=i*2+1, sticky="w", padx=(0, 12))
             setattr(self, f"{name[:-1].lower()}_key_var", var)
         
         thresholds_frame = tk.Frame(frame, bg="#2d2d2d")
-        thresholds_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        thresholds_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
         
         for i, (name, color, default) in enumerate([
             ("Health:", "#dc3545", 50),
@@ -324,7 +333,7 @@ class PristonTaleBot:
             ("Stamina:", "#28a745", 40)
         ]):
             row_frame = tk.Frame(thresholds_frame, bg="#2d2d2d")
-            row_frame.pack(fill=tk.X, pady=2)
+            row_frame.pack(fill=tk.X, pady=1)
             
             tk.Label(row_frame, text=name, bg="#2d2d2d", fg=color,
                     font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT)
@@ -333,10 +342,10 @@ class PristonTaleBot:
                            bg="#2d2d2d", fg="#ffffff", troughcolor="#1a1a1a",
                            highlightthickness=0, activebackground=color)
             scale.set(default)
-            scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 5))
+            scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 4))
             
             label = tk.Label(row_frame, text=f"{default}%", bg="#2d2d2d", fg=color,
-                           font=("Segoe UI", 9, "bold"), width=6)
+                           font=("Segoe UI", 9, "bold"), width=5)
             label.pack(side=tk.RIGHT)
             
             scale.bind("<Motion>", lambda e, l=label, s=scale: l.config(text=f"{s.get()}%"))
@@ -345,10 +354,10 @@ class PristonTaleBot:
     def _create_behavior_settings(self, parent):
         frame = tk.LabelFrame(parent, text="Bot Behavior", bg="#2d2d2d", fg="#ffffff", 
                              font=("Segoe UI", 10, "bold"))
-        frame.pack(fill=tk.X, padx=5, pady=(0, 10))
+        frame.pack(fill=tk.X, padx=4, pady=(0, 8))
         
         scan_frame = tk.Frame(frame, bg="#2d2d2d")
-        scan_frame.pack(fill=tk.X, padx=10, pady=10)
+        scan_frame.pack(fill=tk.X, padx=8, pady=8)
         
         tk.Label(scan_frame, text="Scan Interval:", bg="#2d2d2d", fg="#ffffff",
                 font=("Segoe UI", 9)).pack(side=tk.LEFT)
@@ -357,16 +366,16 @@ class PristonTaleBot:
                                     orient=tk.HORIZONTAL, bg="#2d2d2d", fg="#ffffff",
                                     troughcolor="#1a1a1a", highlightthickness=0)
         self.scan_interval.set(0.5)
-        self.scan_interval.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 5))
+        self.scan_interval.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 4))
         
         self.scan_label = tk.Label(scan_frame, text="0.5s", bg="#2d2d2d", fg="#ffffff",
-                                 font=("Segoe UI", 9), width=6)
+                                 font=("Segoe UI", 9), width=5)
         self.scan_label.pack(side=tk.RIGHT)
         
         self.scan_interval.bind("<Motion>", lambda e: self.scan_label.config(text=f"{self.scan_interval.get()}s"))
         
         debug_frame = tk.Frame(frame, bg="#2d2d2d")
-        debug_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        debug_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
         
         self.debug_var = tk.BooleanVar()
         debug_check = tk.Checkbutton(debug_frame, text="Enable debug mode",
@@ -378,10 +387,10 @@ class PristonTaleBot:
     def _create_spellcasting_settings(self, parent):
         frame = tk.LabelFrame(parent, text="Spellcasting", bg="#2d2d2d", fg="#ffffff", 
                              font=("Segoe UI", 10, "bold"))
-        frame.pack(fill=tk.X, padx=5, pady=(0, 10))
+        frame.pack(fill=tk.X, padx=4, pady=(0, 8))
         
         enable_frame = tk.Frame(frame, bg="#2d2d2d")
-        enable_frame.pack(fill=tk.X, padx=10, pady=10)
+        enable_frame.pack(fill=tk.X, padx=8, pady=8)
         
         self.spellcasting_var = tk.BooleanVar()
         spell_check = tk.Checkbutton(enable_frame, text="Enable spellcasting",
@@ -391,7 +400,7 @@ class PristonTaleBot:
         spell_check.pack(side=tk.LEFT)
         
         controls_frame = tk.Frame(frame, bg="#2d2d2d")
-        controls_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        controls_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
         
         tk.Label(controls_frame, text="Key:", bg="#2d2d2d", fg="#ffffff",
                 font=("Segoe UI", 9)).pack(side=tk.LEFT)
@@ -400,7 +409,7 @@ class PristonTaleBot:
         spell_combo = ttk.Combobox(controls_frame, textvariable=self.spell_key_var,
                                  values=["F1", "F2", "F3", "F4", "F5", "F6"], 
                                  state="readonly", width=6)
-        spell_combo.pack(side=tk.LEFT, padx=(5, 15))
+        spell_combo.pack(side=tk.LEFT, padx=(4, 12))
         
         tk.Label(controls_frame, text="Interval:", bg="#2d2d2d", fg="#ffffff",
                 font=("Segoe UI", 9)).pack(side=tk.LEFT)
@@ -409,22 +418,22 @@ class PristonTaleBot:
                                      orient=tk.HORIZONTAL, bg="#2d2d2d", fg="#ffffff",
                                      troughcolor="#1a1a1a", highlightthickness=0)
         self.spell_interval.set(3.7)
-        self.spell_interval.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
+        self.spell_interval.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 4))
         
         self.spell_label = tk.Label(controls_frame, text="3.7s", bg="#2d2d2d", fg="#ffffff",
-                                   font=("Segoe UI", 9), width=6)
+                                   font=("Segoe UI", 9), width=5)
         self.spell_label.pack(side=tk.RIGHT)
         
         self.spell_interval.bind("<Motion>", lambda e: self.spell_label.config(text=f"{self.spell_interval.get()}s"))
     
     def _create_controls_panel(self, parent):
-        controls_frame = tk.Frame(parent, bg="#2d2d2d", padx=15, pady=15)
+        controls_frame = tk.Frame(parent, bg="#2d2d2d", padx=12, pady=12)
         controls_frame.grid(row=1, column=0, sticky="ew")
         controls_frame.grid_columnconfigure(0, weight=1)
         controls_frame.grid_columnconfigure(1, weight=1)
         
         bot_frame = tk.Frame(controls_frame, bg="#2d2d2d")
-        bot_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        bot_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         bot_frame.grid_columnconfigure(0, weight=1)
         bot_frame.grid_columnconfigure(1, weight=1)
         
@@ -432,22 +441,22 @@ class PristonTaleBot:
                                  bg="#28a745", fg="#ffffff", relief=tk.FLAT, borderwidth=0,
                                  font=("Segoe UI", 12, "bold"), height=2, state=tk.DISABLED,
                                  activebackground="#218838", command=self.start_bot)
-        self.start_btn.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        self.start_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         
         self.stop_btn = tk.Button(bot_frame, text="STOP BOT",
                                 bg="#dc3545", fg="#ffffff", relief=tk.FLAT, borderwidth=0,
                                 font=("Segoe UI", 12, "bold"), height=2, state=tk.DISABLED,
                                 activebackground="#c82333", command=self.stop_bot)
-        self.stop_btn.grid(row=0, column=1, sticky="ew", padx=(5, 0))
+        self.stop_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0))
         
         self.largato_btn = tk.Button(controls_frame, text="LARGATO HUNT",
                                    bg="#9c27b0", fg="#ffffff", relief=tk.FLAT, borderwidth=0,
                                    font=("Segoe UI", 11, "bold"), height=2, state=tk.DISABLED,
                                    activebackground="#7b1fa2", command=self.start_largato_hunt)
-        self.largato_btn.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        self.largato_btn.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         
         stats_frame = tk.Frame(controls_frame, bg="#2d2d2d")
-        stats_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        stats_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         
         self._create_stats_display(stats_frame)
         
@@ -460,13 +469,13 @@ class PristonTaleBot:
                              bg="#6c757d", fg="#ffffff", relief=tk.FLAT, borderwidth=0,
                              font=("Segoe UI", 10), height=1, activebackground="#5a6268",
                              command=self.reset_stats)
-        reset_btn.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        reset_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         
         save_btn = tk.Button(actions_frame, text="Save Settings",
                            bg="#17a2b8", fg="#ffffff", relief=tk.FLAT, borderwidth=0,
                            font=("Segoe UI", 10), height=1, activebackground="#138496",
                            command=self.save_settings)
-        save_btn.grid(row=0, column=1, sticky="ew", padx=(5, 0))
+        save_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0))
     
     def _create_stats_display(self, parent):
         stats_grid = tk.Frame(parent, bg="#2d2d2d")
@@ -488,7 +497,7 @@ class PristonTaleBot:
             row, col = divmod(i, 3)
             
             frame = tk.Frame(stats_grid, bg="#2d2d2d")
-            frame.grid(row=row, column=col, sticky="ew", padx=2, pady=2)
+            frame.grid(row=row, column=col, sticky="ew", padx=1, pady=1)
             
             tk.Label(frame, text=text, bg="#2d2d2d", fg=color,
                     font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT)
@@ -530,7 +539,7 @@ class PristonTaleBot:
                 
                 if hasattr(selector, 'preview_image') and selector.preview_image:
                     try:
-                        img = selector.preview_image.resize((100, 50), Image.Resampling.LANCZOS)
+                        img = selector.preview_image.resize((80, 40), Image.Resampling.LANCZOS)
                         photo = ImageTk.PhotoImage(img)
                         selector.preview_label.config(image=photo, text="")
                         selector.preview_label.image = photo

@@ -17,19 +17,6 @@ class MONITORINFOEX(Structure):
         ("szDevice", c_wchar * 32)
     ]
 
-class MonitorInfo:
-    def __init__(self, index, x, y, width, height, is_primary=False):
-        self.index = index
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.is_primary = is_primary
-        
-    def __str__(self):
-        primary_text = " (Primary)" if self.is_primary else ""
-        return f"Monitor {self.index + 1}{primary_text}: {self.width}x{self.height} at ({self.x}, {self.y})"
-
 class EnhancedScreenSelector:
     def __init__(self, root):
         self.root = root
@@ -47,7 +34,6 @@ class EnhancedScreenSelector:
         self.start_x = None
         self.start_y = None
         self.preview_image = None
-        self.selected_monitor = None
         self.title = "Selection"
         self.color = "yellow"
         
@@ -94,7 +80,7 @@ class EnhancedScreenSelector:
             return True
         return False
     
-    def _get_monitors(self):
+    def _get_desktop_bounds(self):
         monitors = []
         
         def monitor_enum_proc(hMonitor, hdcMonitor, lprcMonitor, dwData):
@@ -103,17 +89,12 @@ class EnhancedScreenSelector:
             
             if ctypes.windll.user32.GetMonitorInfoW(hMonitor, byref(info)):
                 rect = info.rcMonitor
-                x = rect.left
-                y = rect.top
-                width = rect.right - rect.left
-                height = rect.bottom - rect.top
-                is_primary = bool(info.dwFlags & 1)
-                
-                monitor = MonitorInfo(len(monitors), x, y, width, height, is_primary)
-                monitors.append(monitor)
-                
-                self.logger.debug(f"Detected monitor {len(monitors)}: {width}x{height} at ({x},{y}) {'(Primary)' if is_primary else ''}")
-                
+                monitors.append({
+                    'x': rect.left,
+                    'y': rect.top,
+                    'width': rect.right - rect.left,
+                    'height': rect.bottom - rect.top
+                })
             return True
         
         try:
@@ -134,27 +115,19 @@ class EnhancedScreenSelector:
             try:
                 width = ctypes.windll.user32.GetSystemMetrics(0)
                 height = ctypes.windll.user32.GetSystemMetrics(1)
-                monitors.append(MonitorInfo(0, 0, 0, width, height, True))
+                monitors = [{'x': 0, 'y': 0, 'width': width, 'height': height}]
                 self.logger.info(f"Fallback to primary monitor: {width}x{height}")
             except Exception as e:
                 self.logger.error(f"Error getting system metrics: {e}")
-                monitors.append(MonitorInfo(0, 0, 0, 1920, 1080, True))
+                monitors = [{'x': 0, 'y': 0, 'width': 1920, 'height': 1080}]
         
-        monitors.sort(key=lambda m: (m.x, m.y))
-        
-        for i, monitor in enumerate(monitors):
-            monitor.index = i
-        
-        return monitors
-    
-    def _get_desktop_bounds(self, monitors):
         if not monitors:
             return 0, 0, 1920, 1080
             
-        min_x = min(m.x for m in monitors)
-        min_y = min(m.y for m in monitors)
-        max_x = max(m.x + m.width for m in monitors)
-        max_y = max(m.y + m.height for m in monitors)
+        min_x = min(m['x'] for m in monitors)
+        min_y = min(m['y'] for m in monitors)
+        max_x = max(m['x'] + m['width'] for m in monitors)
+        max_y = max(m['y'] + m['height'] for m in monitors)
         
         width = max_x - min_x
         height = max_y - min_y
@@ -162,101 +135,14 @@ class EnhancedScreenSelector:
         self.logger.info(f"Desktop bounds: ({min_x}, {min_y}) to ({max_x}, {max_y}) = {width}x{height}")
         return min_x, min_y, width, height
     
-    def _select_monitor(self, monitors):
-        if len(monitors) == 1:
-            return monitors[0]
-        
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Select Monitor")
-        dialog.geometry("500x400")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        dialog.configure(bg="#2d2d2d")
-        
-        selected_monitor = [None]
-        
-        main_frame = tk.Frame(dialog, bg="#2d2d2d", padx=20, pady=20)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        title_label = tk.Label(main_frame, text="Select Monitor for Screen Capture:", 
-                              font=("Arial", 12, "bold"), bg="#2d2d2d", fg="#ffffff")
-        title_label.pack(pady=(0, 15))
-        
-        listbox_frame = tk.Frame(main_frame, bg="#2d2d2d")
-        listbox_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
-        
-        scrollbar = tk.Scrollbar(listbox_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        listbox = tk.Listbox(listbox_frame, height=8, bg="#3d3d3d", fg="#ffffff",
-                           selectbackground="#007acc", font=("Consolas", 10),
-                           yscrollcommand=scrollbar.set)
-        listbox.pack(fill=tk.BOTH, expand=True)
-        scrollbar.config(command=listbox.yview)
-        
-        for monitor in monitors:
-            listbox.insert(tk.END, str(monitor))
-        
-        for i, monitor in enumerate(monitors):
-            if monitor.is_primary:
-                listbox.selection_set(i)
-                listbox.activate(i)
-                break
-        else:
-            if monitors:
-                listbox.selection_set(0)
-                listbox.activate(0)
-        
-        def on_select():
-            selection = listbox.curselection()
-            if selection:
-                selected_monitor[0] = monitors[selection[0]]
-                dialog.destroy()
-            else:
-                messagebox.showwarning("No Selection", "Please select a monitor from the list.", parent=dialog)
-        
-        def on_cancel():
-            selected_monitor[0] = None
-            dialog.destroy()
-        
-        button_frame = tk.Frame(main_frame, bg="#2d2d2d")
-        button_frame.pack()
-        
-        cancel_btn = tk.Button(button_frame, text="Cancel", command=on_cancel,
-                              bg="#6c757d", fg="#ffffff", font=("Arial", 10),
-                              relief=tk.FLAT, padx=20, pady=8)
-        cancel_btn.pack(side=tk.LEFT, padx=(0, 10))
-        
-        select_btn = tk.Button(button_frame, text="Select", command=on_select,
-                              bg="#28a745", fg="#ffffff", font=("Arial", 10, "bold"),
-                              relief=tk.FLAT, padx=20, pady=8)
-        select_btn.pack(side=tk.LEFT)
-        
-        listbox.bind('<Double-Button-1>', lambda e: on_select())
-        dialog.protocol("WM_DELETE_WINDOW", on_cancel)
-        
-        dialog.focus_force()
-        self.root.wait_window(dialog)
-        return selected_monitor[0]
-    
     def start_selection(self, title="Select Area", color="yellow", completion_callback=None):
-        self.logger.info(f"Starting selection: {title}")
+        self.logger.info(f"Starting direct area selection: {title}")
         self.title = title
         self.color = color
         self.completion_callback = completion_callback
         
         try:
-            monitors = self._get_monitors()
-            self.logger.info(f"Detected {len(monitors)} monitor(s)")
-            
-            self.selected_monitor = self._select_monitor(monitors)
-            
-            if not self.selected_monitor:
-                self.logger.info("Monitor selection cancelled")
-                return False
-                
-            self.logger.info(f"Selected: {self.selected_monitor}")
-            self.desktop_bounds = self._get_desktop_bounds(monitors)
+            self.desktop_bounds = self._get_desktop_bounds()
             return self._create_selection_window()
             
         except Exception as e:
@@ -313,37 +199,29 @@ class EnhancedScreenSelector:
             
             self.canvas.create_image(0, 0, image=self.screenshot_tk, anchor=tk.NW)
             
-            monitor = self.selected_monitor
-            text_x = monitor.x - desktop_x + monitor.width // 2
-            text_y = monitor.y - desktop_y + 50
+            text_x = desktop_width // 2
+            text_y = 50
             
-            if text_x >= 0 and text_y >= 0 and text_x < desktop_width and text_y < desktop_height:
-                self.canvas.create_rectangle(
-                    monitor.x - desktop_x, monitor.y - desktop_y,
-                    monitor.x - desktop_x + monitor.width, monitor.y - desktop_y + monitor.height,
-                    outline="cyan", width=3, dash=(8, 4)
-                )
-                
-                self.canvas.create_text(
-                    text_x, text_y,
-                    text=f"Select {self.title} (Monitor {monitor.index + 1})",
-                    fill="white",
-                    font=("Arial", 20, "bold")
-                )
-                
-                self.canvas.create_text(
-                    text_x, text_y + 40,
-                    text="Click and drag to select area anywhere on desktop",
-                    fill="yellow",
-                    font=("Arial", 16)
-                )
-                
-                self.canvas.create_text(
-                    text_x, text_y + 80,
-                    text="ESC to cancel",
-                    fill="white",
-                    font=("Arial", 14)
-                )
+            self.canvas.create_text(
+                text_x, text_y,
+                text=f"Select {self.title}",
+                fill="white",
+                font=("Arial", 24, "bold")
+            )
+            
+            self.canvas.create_text(
+                text_x, text_y + 40,
+                text="Click and drag to select the area",
+                fill="yellow",
+                font=("Arial", 18)
+            )
+            
+            self.canvas.create_text(
+                text_x, text_y + 80,
+                text="ESC to cancel",
+                fill="white",
+                font=("Arial", 16)
+            )
             
             self.canvas.bind("<Button-1>", self._on_click)
             self.canvas.bind("<B1-Motion>", self._on_drag)
@@ -359,7 +237,7 @@ class EnhancedScreenSelector:
             self.start_x = None
             self.start_y = None
             
-            self.logger.info("Selection window created and displayed successfully")
+            self.logger.info("Direct selection window created and displayed successfully")
             return True
             
         except Exception as e:
@@ -371,7 +249,7 @@ class EnhancedScreenSelector:
         self.start_x = event.x + desktop_x
         self.start_y = event.y + desktop_y
         
-        self.logger.info(f"Click registered: canvas ({event.x}, {event.y}) -> global ({self.start_x}, {self.start_y})")
+        self.logger.debug(f"Click registered: canvas ({event.x}, {event.y}) -> global ({self.start_x}, {self.start_y})")
         
         if self.selection_rect:
             self.canvas.delete(self.selection_rect)
@@ -379,7 +257,6 @@ class EnhancedScreenSelector:
             
     def _on_drag(self, event):
         if self.start_x is None or self.start_y is None:
-            self.logger.warning(f"Drag event but no start coordinates")
             return
             
         desktop_x, desktop_y, desktop_width, desktop_height = self.desktop_bounds
@@ -412,7 +289,7 @@ class EnhancedScreenSelector:
                 (canvas_y1 + canvas_y2) / 2,
                 text=f"{int(width)} × {int(height)}",
                 fill="white",
-                font=("Arial", 14, "bold"),
+                font=("Arial", 16, "bold"),
                 tags="size_info"
             )
     
@@ -435,7 +312,7 @@ class EnhancedScreenSelector:
         
         self.logger.info(f"Selection complete: ({self.x1}, {self.y1}) to ({self.x2}, {self.y2}), size: {width}x{height}")
         
-        if width < 3 or height < 3:
+        if width < 5 or height < 5:
             self.logger.warning("Selection too small, ignoring")
             if self.selection_rect:
                 self.canvas.delete(self.selection_rect)
