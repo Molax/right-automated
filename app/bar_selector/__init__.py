@@ -327,7 +327,7 @@ except ImportError as e:
                 width = abs(self.x2 - self.x1)
                 height = abs(self.y2 - self.y1)
                 
-                if width < 10 or height < 10:
+                if width < 3 or height < 3:
                     self.logger.warning("Selection too small, ignoring")
                     if self.selection_rect:
                         self.canvas.delete(self.selection_rect)
@@ -415,6 +415,5 @@ except ImportError as e:
 
 try:
     from .bar_detector import BarDetector
-    from .color_ranges import HEALTH_COLOR_RANGE, MANA_COLOR_RANGE, STAMINA_COLOR_RANGE
 except ImportError:
     pass

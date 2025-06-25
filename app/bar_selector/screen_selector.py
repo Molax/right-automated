@@ -30,7 +30,7 @@ class MonitorInfo:
         primary_text = " (Primary)" if self.is_primary else ""
         return f"Monitor {self.index + 1}{primary_text}: {self.width}x{self.height} at ({self.x}, {self.y})"
 
-class ScreenSelector:
+class EnhancedScreenSelector:
     def __init__(self, root):
         self.root = root
         self.logger = logging.getLogger('PristonBot')
@@ -53,6 +53,14 @@ class ScreenSelector:
         
         self.completion_callback = None
         
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except (AttributeError, OSError):
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except (AttributeError, OSError):
+                pass
+        
     def is_setup(self):
         return self.is_configured and all([
             self.x1 is not None,
@@ -71,6 +79,17 @@ class ScreenSelector:
             
             title = getattr(self, 'title', 'Selection')
             self.logger.info(f"{title} configured from saved coordinates: ({self.x1},{self.y1}) to ({self.x2},{self.y2})")
+            
+            try:
+                self.preview_image = ImageGrab.grab(bbox=(self.x1, self.y1, self.x2, self.y2), all_screens=True)
+            except TypeError:
+                try:
+                    self.preview_image = ImageGrab.grab(bbox=(self.x1, self.y1, self.x2, self.y2))
+                except Exception as e:
+                    self.logger.warning(f"Could not create preview image: {e}")
+            except Exception as e:
+                self.logger.warning(f"Could not create preview image: {e}")
+                
             return True
         return False
     
@@ -92,7 +111,7 @@ class ScreenSelector:
                 monitor = MonitorInfo(len(monitors), x, y, width, height, is_primary)
                 monitors.append(monitor)
                 
-                self.logger.info(f"Detected monitor {len(monitors)}: {width}x{height} at ({x},{y}) {'(Primary)' if is_primary else ''}")
+                self.logger.debug(f"Detected monitor {len(monitors)}: {width}x{height} at ({x},{y}) {'(Primary)' if is_primary else ''}")
                 
             return True
         
@@ -133,40 +152,74 @@ class ScreenSelector:
         
         dialog = tk.Toplevel(self.root)
         dialog.title("Select Monitor")
-        dialog.geometry("400x300")
+        dialog.geometry("500x400")
         dialog.transient(self.root)
         dialog.grab_set()
+        dialog.configure(bg="#2d2d2d")
         
         selected_monitor = [None]
         
-        tk.Label(dialog, text="Select monitor for screen capture:", font=("Arial", 12)).pack(pady=10)
+        main_frame = tk.Frame(dialog, bg="#2d2d2d", padx=20, pady=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
-        listbox = tk.Listbox(dialog, height=8)
-        listbox.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        title_label = tk.Label(main_frame, text="Select Monitor for Screen Capture:", 
+                              font=("Arial", 12, "bold"), bg="#2d2d2d", fg="#ffffff")
+        title_label.pack(pady=(0, 15))
+        
+        listbox_frame = tk.Frame(main_frame, bg="#2d2d2d")
+        listbox_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        
+        scrollbar = tk.Scrollbar(listbox_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        listbox = tk.Listbox(listbox_frame, height=8, bg="#3d3d3d", fg="#ffffff",
+                           selectbackground="#007acc", font=("Consolas", 10),
+                           yscrollcommand=scrollbar.set)
+        listbox.pack(fill=tk.BOTH, expand=True)
+        scrollbar.config(command=listbox.yview)
         
         for monitor in monitors:
             listbox.insert(tk.END, str(monitor))
         
-        listbox.selection_set(0)
+        for i, monitor in enumerate(monitors):
+            if monitor.is_primary:
+                listbox.selection_set(i)
+                listbox.activate(i)
+                break
+        else:
+            if monitors:
+                listbox.selection_set(0)
+                listbox.activate(0)
         
         def on_select():
             selection = listbox.curselection()
             if selection:
                 selected_monitor[0] = monitors[selection[0]]
                 dialog.destroy()
+            else:
+                messagebox.showwarning("No Selection", "Please select a monitor from the list.", parent=dialog)
         
         def on_cancel():
             selected_monitor[0] = None
             dialog.destroy()
         
-        button_frame = tk.Frame(dialog)
-        button_frame.pack(pady=10)
+        button_frame = tk.Frame(main_frame, bg="#2d2d2d")
+        button_frame.pack()
         
-        tk.Button(button_frame, text="Select", command=on_select).pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Cancel", command=on_cancel).pack(side=tk.LEFT, padx=5)
+        cancel_btn = tk.Button(button_frame, text="Cancel", command=on_cancel,
+                              bg="#6c757d", fg="#ffffff", font=("Arial", 10),
+                              relief=tk.FLAT, padx=20, pady=8)
+        cancel_btn.pack(side=tk.LEFT, padx=(0, 10))
         
+        select_btn = tk.Button(button_frame, text="Select", command=on_select,
+                              bg="#28a745", fg="#ffffff", font=("Arial", 10, "bold"),
+                              relief=tk.FLAT, padx=20, pady=8)
+        select_btn.pack(side=tk.LEFT)
+        
+        listbox.bind('<Double-Button-1>', lambda e: on_select())
         dialog.protocol("WM_DELETE_WINDOW", on_cancel)
         
+        dialog.focus_force()
         self.root.wait_window(dialog)
         return selected_monitor[0]
     
@@ -201,7 +254,7 @@ class ScreenSelector:
                 
             self.selection_window = tk.Toplevel(self.root)
             self.selection_window.attributes('-fullscreen', True)
-            self.selection_window.attributes('-alpha', 0.3)
+            self.selection_window.attributes('-alpha', 0.8)
             self.selection_window.attributes('-topmost', True)
             self.selection_window.configure(bg='black')
             
@@ -210,7 +263,7 @@ class ScreenSelector:
             
             try:
                 screenshot = ImageGrab.grab(bbox=(monitor.x, monitor.y, monitor.x + monitor.width, monitor.y + monitor.height), all_screens=True)
-            except:
+            except TypeError:
                 screenshot = ImageGrab.grab(bbox=(monitor.x, monitor.y, monitor.x + monitor.width, monitor.y + monitor.height))
             
             self.screenshot_tk = ImageTk.PhotoImage(screenshot)
@@ -229,18 +282,26 @@ class ScreenSelector:
             
             self.canvas.create_text(
                 monitor.width // 2,
-                30,
-                text=f"Select {self.title} - Click and drag to select area",
-                fill="yellow",
-                font=("Arial", 14, "bold")
+                50,
+                text=f"Select {self.title}",
+                fill="white",
+                font=("Arial", 20, "bold")
             )
             
             self.canvas.create_text(
                 monitor.width // 2,
-                60,
+                90,
+                text="Click and drag to select area",
+                fill="yellow",
+                font=("Arial", 16)
+            )
+            
+            self.canvas.create_text(
+                monitor.width // 2,
+                130,
                 text="ESC to cancel",
                 fill="white",
-                font=("Arial", 12)
+                font=("Arial", 14)
             )
             
             self.canvas.bind("<Button-1>", self._on_click)
@@ -288,21 +349,21 @@ class ScreenSelector:
         self.selection_rect = self.canvas.create_rectangle(
             canvas_x1, canvas_y1, canvas_x2, canvas_y2,
             outline=self.color,
-            width=3,
+            width=4,
             fill="",
-            dash=(8, 4)
+            dash=(10, 5)
         )
         
         width = abs(current_x - self.start_x)
         height = abs(current_y - self.start_y)
         
-        if width > 5 and height > 5:
+        if width > 10 and height > 10:
             self.canvas.create_text(
                 (canvas_x1 + canvas_x2) / 2,
                 (canvas_y1 + canvas_y2) / 2,
-                text=f"{int(width)}×{int(height)}",
+                text=f"{int(width)} × {int(height)}",
                 fill="white",
-                font=("Arial", 12, "bold"),
+                font=("Arial", 14, "bold"),
                 tags="size_info"
             )
     
@@ -322,7 +383,7 @@ class ScreenSelector:
         width = abs(self.x2 - self.x1)
         height = abs(self.y2 - self.y1)
         
-        if width < 10 or height < 10:
+        if width < 3 or height < 3:
             self.logger.warning("Selection too small, ignoring")
             if self.selection_rect:
                 self.canvas.delete(self.selection_rect)
@@ -349,7 +410,10 @@ class ScreenSelector:
         height = abs(self.y2 - self.y1)
         
         try:
-            self.preview_image = ImageGrab.grab(bbox=(self.x1, self.y1, self.x2, self.y2), all_screens=True)
+            try:
+                self.preview_image = ImageGrab.grab(bbox=(self.x1, self.y1, self.x2, self.y2), all_screens=True)
+            except TypeError:
+                self.preview_image = ImageGrab.grab(bbox=(self.x1, self.y1, self.x2, self.y2))
             
             debug_dir = "debug_images"
             if not os.path.exists(debug_dir):
@@ -367,7 +431,7 @@ class ScreenSelector:
             f"Confirm {self.title} Selection",
             f"Is this the correct area for {self.title}?\n\n"
             f"Coordinates: ({self.x1}, {self.y1}) to ({self.x2}, {self.y2})\n"
-            f"Size: {width}x{height} pixels",
+            f"Size: {width}×{height} pixels",
             parent=self.root
         )
         
@@ -427,3 +491,5 @@ class ScreenSelector:
         except Exception as e:
             self.logger.error(f"Error capturing region: {e}", exc_info=True)
             return None
+
+ScreenSelector = EnhancedScreenSelector
