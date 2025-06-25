@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import logging
-from PIL import ImageTk, Image, ImageGrab
+from PIL import ImageTk, Image
 from app.bar_selector import ScreenSelector
 
 logger = logging.getLogger('PristonBot')
@@ -17,7 +17,6 @@ class BarSelectorUI:
         self.mp_bar_selector = ScreenSelector(root)
         self.sp_bar_selector = ScreenSelector(root)
         self.largato_skill_selector = ScreenSelector(root)
-        self.game_window = ScreenSelector(root)
         
         self._create_ui()
         
@@ -92,41 +91,6 @@ class BarSelectorUI:
         bars_container.grid_rowconfigure(0, weight=1)
         bars_container.grid_rowconfigure(1, weight=0)
     
-    def start_window_selection(self):
-        self.game_window = ScreenSelector(self.root)
-        self.game_window.start_selection(title="Game Window", color="yellow")
-        self.root.after(1000, self.update_window_preview)
-    
-    def update_window_preview(self):
-        if self.game_window.is_setup():
-            if hasattr(self.game_window, 'preview_image') and self.game_window.preview_image is not None:
-                try:
-                    preview_size = (200, 150)
-                    resized_img = self.game_window.preview_image.resize(preview_size, Image.LANCZOS)
-                    preview_photo = ImageTk.PhotoImage(resized_img)
-                    
-                    try:
-                        import app.gui
-                        if hasattr(app.gui, 'main_app') and hasattr(app.gui.main_app, 'window_preview_label'):
-                            app.gui.main_app.window_preview_label.config(image=preview_photo, text="")
-                            app.gui.main_app.window_preview_label.image = preview_photo
-                    except (ImportError, AttributeError):
-                        try:
-                            import enhanced_gui
-                            if hasattr(enhanced_gui, 'main_app') and hasattr(enhanced_gui.main_app, 'window_preview_label'):
-                                enhanced_gui.main_app.window_preview_label.config(image=preview_photo, text="")
-                                enhanced_gui.main_app.window_preview_label.image = preview_photo
-                        except (ImportError, AttributeError):
-                            pass
-                    
-                    self.log_callback(f"Game window selected: ({self.game_window.x1},{self.game_window.y1}) to ({self.game_window.x2},{self.game_window.y2})")
-                except Exception as e:
-                    logger.error(f"Error displaying window preview: {e}")
-            else:
-                self.root.after(500, self.update_window_preview)
-        else:
-            self.root.after(1000, self.update_window_preview)
-    
     def start_bar_selection(self, bar_type, color):
         if bar_type == "Health":
             self.hp_bar_selector = ScreenSelector(self.root)
@@ -151,7 +115,7 @@ class BarSelectorUI:
         if selector.is_setup():
             if hasattr(selector, 'preview_image') and selector.preview_image is not None:
                 try:
-                    preview_img = selector.preview_image_rotated if hasattr(selector, 'preview_image_rotated') and selector.preview_image_rotated is not None else selector.preview_image
+                    preview_img = selector.preview_image
                     
                     preview_size = (100, 60)
                     resized_img = preview_img.resize(preview_size, Image.LANCZOS)

@@ -14,15 +14,6 @@ class ConfigManagerUI:
         try:
             config = load_config()
             
-            game_window = self.bar_selector_ui.game_window
-            if game_window.is_setup():
-                config["bars"]["game_window"]["x1"] = game_window.x1
-                config["bars"]["game_window"]["y1"] = game_window.y1
-                config["bars"]["game_window"]["x2"] = game_window.x2
-                config["bars"]["game_window"]["y2"] = game_window.y2
-                config["bars"]["game_window"]["configured"] = True
-                logger.info("Saved game window configuration")
-            
             hp_bar = self.bar_selector_ui.hp_bar_selector
             if hp_bar.is_setup():
                 config["bars"]["health_bar"]["x1"] = hp_bar.x1
@@ -97,26 +88,6 @@ class ConfigManagerUI:
             
             bars_configured = 0
             
-            game_window = self.bar_selector_ui.game_window
-            game_window_config = bars_config.get("game_window", {})
-            if game_window_config.get("configured", False):
-                x1 = game_window_config.get("x1")
-                y1 = game_window_config.get("y1")
-                x2 = game_window_config.get("x2")
-                y2 = game_window_config.get("y2")
-                
-                if all([x1 is not None, y1 is not None, x2 is not None, y2 is not None]):
-                    if game_window.configure_from_saved(x1, y1, x2, y2):
-                        logger.info(f"Loaded game window configuration: ({x1},{y1}) to ({x2},{y2})")
-                        if not hasattr(game_window, 'preview_image') or game_window.preview_image is None:
-                            try:
-                                game_window.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
-                                logger.info("Created preview image for game window")
-                            except Exception as e:
-                                logger.warning(f"Could not create preview image for game window: {e}")
-                
-                self.bar_selector_ui.update_window_preview()
-            
             hp_bar = self.bar_selector_ui.hp_bar_selector
             hp_config = bars_config.get("health_bar", {})
             if hp_config.get("configured", False):
@@ -133,7 +104,7 @@ class ConfigManagerUI:
                         
                         if not hasattr(hp_bar, 'preview_image') or hp_bar.preview_image is None:
                             try:
-                                hp_bar.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+                                hp_bar.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True)
                                 logger.info("Created preview image for health bar")
                             except Exception as e:
                                 logger.warning(f"Could not create preview image for health bar: {e}")
@@ -156,7 +127,7 @@ class ConfigManagerUI:
                         
                         if not hasattr(mp_bar, 'preview_image') or mp_bar.preview_image is None:
                             try:
-                                mp_bar.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+                                mp_bar.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True)
                                 logger.info("Created preview image for mana bar")
                             except Exception as e:
                                 logger.warning(f"Could not create preview image for mana bar: {e}")
@@ -179,7 +150,7 @@ class ConfigManagerUI:
                         
                         if not hasattr(sp_bar, 'preview_image') or sp_bar.preview_image is None:
                             try:
-                                sp_bar.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+                                sp_bar.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True)
                                 logger.info("Created preview image for stamina bar")
                             except Exception as e:
                                 logger.warning(f"Could not create preview image for stamina bar: {e}")
@@ -202,7 +173,7 @@ class ConfigManagerUI:
                             
                             if not hasattr(largato_bar, 'preview_image') or largato_bar.preview_image is None:
                                 try:
-                                    largato_bar.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+                                    largato_bar.preview_image = ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True)
                                     logger.info("Created preview image for Largato skill bar")
                                 except Exception as e:
                                     logger.warning(f"Could not create preview image for Largato skill bar: {e}")

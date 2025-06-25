@@ -1,7 +1,7 @@
 """
-Enhanced Screen and Bar Selector with Proper Overlay Sizing
-----------------------------------------------------------
-Fixed to use actual monitor dimensions for overlay window.
+Enhanced Screen and Bar Selector with Full Screen Coverage
+--------------------------------------------------------
+Fixed monitor selection to ensure complete screen coverage.
 """
 
 import os
@@ -36,6 +36,34 @@ class MonitorInfo:
     def __str__(self):
         primary_text = " (Primary)" if self.is_primary else ""
         return f"Monitor {self.index + 1}{primary_text}: {self.width}x{self.height} at ({self.x}, {self.y})"
+    
+    def get_full_bounds(self):
+        """Get monitor bounds covering entire virtual screen if needed"""
+        try:
+            virtual_screen_left = ctypes.windll.user32.GetSystemMetrics(76)
+            virtual_screen_top = ctypes.windll.user32.GetSystemMetrics(77)
+            virtual_screen_width = ctypes.windll.user32.GetSystemMetrics(78)
+            virtual_screen_height = ctypes.windll.user32.GetSystemMetrics(79)
+            
+            virtual_screen_right = virtual_screen_left + virtual_screen_width
+            virtual_screen_bottom = virtual_screen_top + virtual_screen_height
+            
+            buffer_size = 500
+            
+            extended_left = min(self.x - buffer_size, virtual_screen_left - buffer_size)
+            extended_top = min(self.y - buffer_size, virtual_screen_top - buffer_size)
+            extended_right = max(self.x + self.width + buffer_size, virtual_screen_right + buffer_size)
+            extended_bottom = max(self.y + self.height + buffer_size, virtual_screen_bottom + buffer_size)
+            
+            return (extended_left, extended_top, extended_right, extended_bottom)
+        except:
+            buffer_size = 1000
+            return (
+                self.x - buffer_size,
+                self.y - buffer_size,
+                self.x + self.width + buffer_size,
+                self.y + self.height + buffer_size
+            )
 
 class MonitorDetector:
     @staticmethod
@@ -52,7 +80,6 @@ class MonitorDetector:
                 y = rect.top
                 width = rect.right - rect.left
                 height = rect.bottom - rect.top
-                
                 is_primary = bool(info.dwFlags & 1)
                 
                 monitor = MonitorInfo(len(monitors), x, y, width, height, is_primary)
@@ -169,7 +196,7 @@ class ScreenSelector:
             self.logger.error("No monitor available")
             messagebox.showerror("Error", "No monitor detected!")
             return
-            
+        
         try:
             self.logger.debug(f"Taking screenshot for monitor {self.selected_monitor.index + 1}")
             
@@ -177,55 +204,38 @@ class ScreenSelector:
             desktop_width, desktop_height = full_desktop_screenshot.size
             self.logger.debug(f"Full desktop screenshot size: {desktop_width}x{desktop_height}")
             
-            monitor_x1 = self.selected_monitor.x
-            monitor_y1 = self.selected_monitor.y
-            monitor_x2 = self.selected_monitor.x + self.selected_monitor.width
-            monitor_y2 = self.selected_monitor.y + self.selected_monitor.height
+            bounds = self.selected_monitor.get_full_bounds()
+            ext_x1, ext_y1, ext_x2, ext_y2 = bounds
             
-            self.logger.debug(f"Monitor bounds before clipping: ({monitor_x1}, {monitor_y1}, {monitor_x2}, {monitor_y2})")
+            virtual_screen_left = ctypes.windll.user32.GetSystemMetrics(76)
+            virtual_screen_top = ctypes.windll.user32.GetSystemMetrics(77)
+            virtual_screen_width = ctypes.windll.user32.GetSystemMetrics(78)
+            virtual_screen_height = ctypes.windll.user32.GetSystemMetrics(79)
             
-            crop_x1 = max(0, monitor_x1)
-            crop_y1 = max(0, monitor_y1)
-            crop_x2 = min(desktop_width, monitor_x2)
-            crop_y2 = min(desktop_height, monitor_y2)
+            actual_left = virtual_screen_left
+            actual_top = virtual_screen_top
+            actual_right = virtual_screen_left + virtual_screen_width
+            actual_bottom = virtual_screen_top + virtual_screen_height
+            
+            crop_x1 = max(0, ext_x1 - actual_left)
+            crop_y1 = max(0, ext_y1 - actual_top)
+            crop_x2 = min(desktop_width, ext_x2 - actual_left)
+            crop_y2 = min(desktop_height, ext_y2 - actual_top)
+            
+            self.logger.debug(f"Virtual screen: ({actual_left}, {actual_top}) to ({actual_right}, {actual_bottom})")
+            self.logger.debug(f"Extended bounds: ({ext_x1}, {ext_y1}) to ({ext_x2}, {ext_y2})")
+            self.logger.debug(f"Crop bounds: ({crop_x1}, {crop_y1}) to ({crop_x2}, {crop_y2})")
             
             monitor_screenshot = full_desktop_screenshot.crop((crop_x1, crop_y1, crop_x2, crop_y2))
             actual_width, actual_height = monitor_screenshot.size
             
-            self.logger.info("Using 90% of monitor area for selection overlay")
-            margin_x = int(self.selected_monitor.width * 0.05)
-            margin_y = int(self.selected_monitor.height * 0.05)
-            
-            area_x1 = monitor_x1 + margin_x
-            area_y1 = monitor_y1 + margin_y
-            area_x2 = monitor_x2 - margin_x
-            area_y2 = monitor_y2 - margin_y
-            
-            area_crop_x1 = max(0, area_x1 - crop_x1)
-            area_crop_y1 = max(0, area_y1 - crop_y1)
-            area_crop_x2 = min(actual_width, area_x2 - crop_x1)
-            area_crop_y2 = min(actual_height, area_y2 - crop_y1)
-            
-            monitor_screenshot = monitor_screenshot.crop((area_crop_x1, area_crop_y1, area_crop_x2, area_crop_y2))
-            actual_width, actual_height = monitor_screenshot.size
-            
-            crop_x1 = area_x1
-            crop_y1 = area_y1
-            monitor_x1 = area_x1
-            monitor_y1 = area_y1
-            
-            self.logger.info(f"Using 90% monitor area: ({area_x1}, {area_y1}, {area_x2}, {area_y2}) - {actual_width}x{actual_height}")
-            
-            self.logger.debug(f"Final screenshot: {actual_width}x{actual_height}")
-            self.logger.debug(f"Crop bounds: ({crop_x1}, {crop_y1})")
+            self.logger.debug(f"Monitor screenshot: {actual_width}x{actual_height}")
             
             self.full_screenshot = monitor_screenshot
             self.screenshot_tk = ImageTk.PhotoImage(monitor_screenshot)
             
-            self.crop_offset_x = crop_x1
-            self.crop_offset_y = crop_y1
-            self.monitor_offset_x = monitor_x1
-            self.monitor_offset_y = monitor_y1
+            self.window_offset_x = ext_x1
+            self.window_offset_y = ext_y1
             
         except Exception as e:
             self.logger.error(f"Error taking screenshot: {e}", exc_info=True)
@@ -236,12 +246,12 @@ class ScreenSelector:
         self.selection_window.title(title)
         
         self.selection_window.overrideredirect(True)
-        self.selection_window.attributes('-alpha', 0.8)
+        self.selection_window.attributes('-alpha', 0.85)
         self.selection_window.attributes('-topmost', True)
         self.selection_window.configure(bg='black')
         
-        window_x = self.crop_offset_x
-        window_y = self.crop_offset_y
+        window_x = max(-1000, self.window_offset_x)
+        window_y = max(-1000, self.window_offset_y)
         window_width = actual_width
         window_height = actual_height
         
@@ -271,7 +281,7 @@ class ScreenSelector:
         if len(monitors) > 1:
             instruction_text += f"\nMonitor {self.selected_monitor.index + 1} selected"
             
-        text_x = actual_width // 2
+        text_x = window_width // 2
         text_y = 50
         
         self.canvas.create_text(
@@ -286,7 +296,7 @@ class ScreenSelector:
         monitor_info_text = f"Monitor {self.selected_monitor.index + 1}: {self.selected_monitor.width}x{self.selected_monitor.height} at ({self.selected_monitor.x}, {self.selected_monitor.y})"
         self.canvas.create_text(
             text_x,
-            actual_height - 50,
+            window_height - 50,
             text=monitor_info_text,
             fill="white",
             font=("Arial", 12),
@@ -310,8 +320,8 @@ class ScreenSelector:
         
     def on_press(self, event):
         self.is_selecting = True
-        self.x1 = event.x + self.monitor_offset_x
-        self.y1 = event.y + self.monitor_offset_y
+        self.x1 = event.x + self.window_offset_x
+        self.y1 = event.y + self.window_offset_y
         self.logger.debug(f"Started selection at canvas({event.x}, {event.y}) -> screen({self.x1}, {self.y1})")
         
         self.selection_rect = self.canvas.create_rectangle(
@@ -321,8 +331,8 @@ class ScreenSelector:
         
     def on_drag(self, event):
         if self.is_selecting and self.selection_rect:
-            start_x = self.x1 - self.monitor_offset_x
-            start_y = self.y1 - self.monitor_offset_y
+            start_x = self.x1 - self.window_offset_x
+            start_y = self.y1 - self.window_offset_y
             
             canvas_width = self.canvas.winfo_width()
             canvas_height = self.canvas.winfo_height()
@@ -338,8 +348,8 @@ class ScreenSelector:
             
         self.is_selecting = False
         
-        self.x2 = event.x + self.monitor_offset_x
-        self.y2 = event.y + self.monitor_offset_y
+        self.x2 = event.x + self.window_offset_x
+        self.y2 = event.y + self.window_offset_y
         self.logger.debug(f"Completed selection at canvas({event.x}, {event.y}) -> screen({self.x2}, {self.y2})")
         
         if self.x1 > self.x2:
@@ -363,8 +373,8 @@ class ScreenSelector:
         
         info_text = f"Selected: ({self.x1}, {self.y1}) to ({self.x2}, {self.y2})\nSize: {width}x{height} pixels"
         
-        canvas_center_x = ((self.x1 + self.x2) / 2) - self.monitor_offset_x
-        canvas_bottom_y = min((self.y2 - self.monitor_offset_y) + 20, self.canvas.winfo_height() - 40)
+        canvas_center_x = ((self.x1 + self.x2) / 2) - self.window_offset_x
+        canvas_bottom_y = min((self.y2 - self.window_offset_y) + 20, self.canvas.winfo_height() - 40)
         
         self.canvas.create_text(
             canvas_center_x,
@@ -376,10 +386,10 @@ class ScreenSelector:
         )
         
         try:
-            crop_x1 = self.x1 - self.crop_offset_x
-            crop_y1 = self.y1 - self.crop_offset_y
-            crop_x2 = self.x2 - self.crop_offset_x
-            crop_y2 = self.y2 - self.crop_offset_y
+            crop_x1 = self.x1 - self.window_offset_x
+            crop_y1 = self.y1 - self.window_offset_y
+            crop_x2 = self.x2 - self.window_offset_x
+            crop_y2 = self.y2 - self.window_offset_y
             
             crop_x1 = max(0, crop_x1)
             crop_y1 = max(0, crop_y1)
@@ -450,6 +460,7 @@ class ScreenSelector:
             self.logger.error(f"Error capturing region: {e}", exc_info=True)
             return None
 
+
 class MonitorSelectionDialog:
     def __init__(self, parent, monitors):
         self.parent = parent
@@ -461,8 +472,8 @@ class MonitorSelectionDialog:
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("Select Monitor")
         
-        dialog_width = 500
-        dialog_height = 400
+        dialog_width = 600
+        dialog_height = 500
         
         screen_width = self.dialog.winfo_screenwidth()
         screen_height = self.dialog.winfo_screenheight()
@@ -472,7 +483,7 @@ class MonitorSelectionDialog:
         
         self.dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
         self.dialog.resizable(True, True)
-        self.dialog.minsize(400, 300)
+        self.dialog.minsize(500, 400)
         
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
@@ -508,7 +519,8 @@ class MonitorSelectionDialog:
         
         instructions = tk.Label(
             main_frame,
-            text="Please select which monitor to use for screen selection:",
+            text="Please select which monitor to use for screen selection:\n"
+                 "(Extended coverage will ensure full screen access)",
             font=("Arial", 11),
             bg="white"
         )
@@ -526,13 +538,14 @@ class MonitorSelectionDialog:
             font=("Consolas", 11),
             selectmode=tk.SINGLE,
             activestyle='none',
-            height=6
+            height=8
         )
         self.monitor_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.monitor_listbox.yview)
         
         for monitor in self.monitors:
-            self.monitor_listbox.insert(tk.END, str(monitor))
+            display_text = str(monitor) + " (Full Coverage)"
+            self.monitor_listbox.insert(tk.END, display_text)
             
         for i, monitor in enumerate(self.monitors):
             if monitor.is_primary:
@@ -543,8 +556,29 @@ class MonitorSelectionDialog:
             if self.monitors:
                 self.monitor_listbox.selection_set(0)
         
+        preview_frame = tk.LabelFrame(
+            main_frame, 
+            text="Monitor Layout Preview",
+            bg="white",
+            font=("Arial", 10)
+        )
+        preview_frame.grid(row=3, column=0, sticky="ew", pady=(0, 15))
+        
+        self.preview_canvas = tk.Canvas(
+            preview_frame,
+            width=560,
+            height=120,
+            bg="#f0f0f0",
+            highlightthickness=0
+        )
+        self.preview_canvas.pack(padx=10, pady=10)
+        
+        self._draw_monitor_layout()
+        
+        self.monitor_listbox.bind('<<ListboxSelect>>', self._on_selection_change)
+        
         button_frame = tk.Frame(main_frame, bg="white")
-        button_frame.grid(row=3, column=0, sticky="ew")
+        button_frame.grid(row=4, column=0, sticky="ew")
         
         button_frame.grid_columnconfigure(0, weight=1)
         
@@ -582,7 +616,94 @@ class MonitorSelectionDialog:
         cancel_btn.pack(side=tk.RIGHT)
         
         self.monitor_listbox.bind('<Double-Button-1>', lambda e: self._on_select())
+        
+        info_label = tk.Label(
+            main_frame,
+            text="Note: Full coverage ensures complete screen access",
+            font=("Arial", 9, "italic"),
+            bg="white",
+            fg="#666666"
+        )
+        info_label.grid(row=5, column=0, pady=(10, 0))
+        
+    def _draw_monitor_layout(self):
+        self.preview_canvas.delete("all")
+        
+        if not self.monitors:
+            return
             
+        all_bounds = [m.get_full_bounds() for m in self.monitors]
+        min_x = min(b[0] for b in all_bounds)
+        min_y = min(b[1] for b in all_bounds)
+        max_x = max(b[2] for b in all_bounds)
+        max_y = max(b[3] for b in all_bounds)
+        
+        total_width = max_x - min_x
+        total_height = max_y - min_y
+        
+        canvas_width = 540
+        canvas_height = 100
+        
+        if total_width > 0 and total_height > 0:
+            scale_x = canvas_width / total_width
+            scale_y = canvas_height / total_height
+            scale = min(scale_x, scale_y) * 0.8
+        else:
+            scale = 1.0
+        
+        scaled_width = total_width * scale
+        scaled_height = total_height * scale
+        offset_x = (560 - scaled_width) / 2
+        offset_y = (120 - scaled_height) / 2
+        
+        selection = self.monitor_listbox.curselection()
+        selected_index = selection[0] if selection else 0
+        
+        for i, monitor in enumerate(self.monitors):
+            ext_x1, ext_y1, ext_x2, ext_y2 = monitor.get_full_bounds()
+            
+            ext_x1_scaled = (ext_x1 - min_x) * scale + offset_x
+            ext_y1_scaled = (ext_y1 - min_y) * scale + offset_y
+            ext_x2_scaled = (ext_x2 - min_x) * scale + offset_x
+            ext_y2_scaled = (ext_y2 - min_y) * scale + offset_y
+            
+            x1 = (monitor.x - min_x) * scale + offset_x
+            y1 = (monitor.y - min_y) * scale + offset_y
+            x2 = x1 + monitor.width * scale
+            y2 = y1 + monitor.height * scale
+            
+            is_selected = i == selected_index
+            
+            if is_selected:
+                self.preview_canvas.create_rectangle(
+                    ext_x1_scaled, ext_y1_scaled, ext_x2_scaled, ext_y2_scaled,
+                    outline="#4CAF50",
+                    width=1,
+                    dash=(3, 3)
+                )
+            
+            color = "#4CAF50" if is_selected else "#E0E0E0"
+            outline = "#2E7D32" if is_selected else "#9E9E9E"
+            width = 3 if is_selected else 2
+            
+            self.preview_canvas.create_rectangle(
+                x1, y1, x2, y2,
+                fill=color,
+                outline=outline,
+                width=width
+            )
+            
+            self.preview_canvas.create_text(
+                (x1 + x2) / 2,
+                (y1 + y2) / 2,
+                text=str(i + 1),
+                font=("Arial", 12, "bold"),
+                fill="white" if is_selected else "black"
+            )
+            
+    def _on_selection_change(self, event):
+        self._draw_monitor_layout()
+        
     def _on_select(self):
         selection = self.monitor_listbox.curselection()
         if selection:
@@ -598,6 +719,7 @@ class MonitorSelectionDialog:
     def _on_cancel(self):
         self.selected_monitor = None
         self.dialog.destroy()
+
 
 class BarDetector:
     def __init__(self, title, color_range):
@@ -663,6 +785,7 @@ class BarDetector:
         except Exception as e:
             self.logger.error(f"Error detecting {self.title} bar percentage: {e}", exc_info=True)
             return 100
+
 
 HEALTH_COLOR_RANGE = (
     np.array([0, 50, 50]),

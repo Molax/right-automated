@@ -43,13 +43,6 @@ DEFAULT_CONFIG = {
         }
     },
     "bars": {
-        "game_window": {
-            "x1": None,
-            "y1": None,
-            "x2": None,
-            "y2": None,
-            "configured": False
-        },
         "health_bar": {
             "x1": None,
             "y1": None,
@@ -159,6 +152,11 @@ def load_config():
                         "configured": False
                     }
                     logging.getLogger('PristonBot').info("Added missing largato_skill_bar configuration")
+                    save_config(config)
+                
+                if "game_window" in config["bars"]:
+                    del config["bars"]["game_window"]
+                    logging.getLogger('PristonBot').info("Removed deprecated game_window configuration")
                     save_config(config)
                 
                 return config
