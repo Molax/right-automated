@@ -1,13 +1,6 @@
-"""
-Main GUI for the Priston Tale Potion Bot
----------------------------------------
-Clean implementation without game window selection.
-"""
-
-import os
-import time
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
+import time
 import logging
 
 logger = logging.getLogger('PristonBot')
@@ -31,31 +24,29 @@ class PristonTaleBot:
             except:
                 pass
         
-        self.root.geometry("900x700")
-        self.root.minsize(800, 600)
+        self.root.geometry("950x800")
+        self.root.minsize(950, 800)
         self.root.title("Priston Tale Potion Bot")
-        
-        self.root.grid_rowconfigure(0, weight=1)
-        self.root.grid_columnconfigure(0, weight=1)
+        self.root.configure(bg="#f0f0f0")
         
         main_container = ttk.Frame(root, padding="10")
-        main_container.grid(row=0, column=0, sticky="nsew")
+        main_container.pack(fill=tk.BOTH, expand=True)
         main_container.grid_rowconfigure(1, weight=1)
-        main_container.grid_columnconfigure(0, weight=1)
-        main_container.grid_columnconfigure(1, weight=1)
+        main_container.grid_columnconfigure(0, weight=2)  # Give more weight to left column
+        main_container.grid_columnconfigure(1, weight=1)  # Less weight to right column
         
-        title_frame = ttk.Frame(main_container)
-        title_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        header_frame = ttk.Frame(main_container)
+        header_frame.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         
         title_label = ttk.Label(
-            title_frame, 
+            header_frame, 
             text="Priston Tale Potion Bot", 
             font=("Arial", 16, "bold")
         )
         title_label.pack(side=tk.LEFT)
         
         version_label = ttk.Label(
-            title_frame, 
+            header_frame, 
             text="v1.0.0", 
             font=("Arial", 10), 
             foreground="#666666"
@@ -64,7 +55,6 @@ class PristonTaleBot:
         
         left_column = ttk.Frame(main_container)
         left_column.grid(row=1, column=0, sticky="nsew", padx=(0, 5))
-        left_column.grid_rowconfigure(0, weight=1)
         left_column.grid_rowconfigure(1, weight=1)
         left_column.grid_columnconfigure(0, weight=1)
         
@@ -75,7 +65,7 @@ class PristonTaleBot:
         
         self._create_bar_selection_frame(left_column)
         self._create_log_frame(left_column)
-        self._create_settings_and_control_frame(right_column)
+        self._create_settings_frame(right_column)
         self._initialize_components()
         
         self.log("Bot GUI initialized successfully")
@@ -111,35 +101,16 @@ class PristonTaleBot:
         )
         self.log_text.grid(row=0, column=0, sticky="nsew")
     
-    def _create_settings_and_control_frame(self, parent):
-        notebook = ttk.Notebook(parent)
-        notebook.grid(row=0, column=0, sticky="nsew")
+    def _create_settings_frame(self, parent):
+        settings_frame = ttk.LabelFrame(parent, text="Settings & Control", padding="5")
+        settings_frame.grid(row=0, column=0, sticky="nsew")
+        settings_frame.grid_rowconfigure(0, weight=1)
+        settings_frame.grid_columnconfigure(0, weight=1)
         
-        self.settings_frame = ttk.Frame(notebook, padding="10")
-        notebook.add(self.settings_frame, text="Settings")
+        # Configure the parent to not expand the settings too much
+        parent.grid_columnconfigure(0, weight=0, minsize=400)  # Fixed reasonable width
         
-        self.control_frame = ttk.Frame(notebook, padding="10")
-        notebook.add(self.control_frame, text="Bot Control")
-        
-        control_container = ttk.Frame(self.control_frame)
-        control_container.pack(fill=tk.BOTH, expand=True)
-        
-        status_frame = ttk.LabelFrame(control_container, text="Status", padding="5")
-        status_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        values_frame = ttk.LabelFrame(control_container, text="Current Values", padding="5")
-        values_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        buttons_frame = ttk.LabelFrame(control_container, text="Controls", padding="5")
-        buttons_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        stats_frame = ttk.LabelFrame(control_container, text="Statistics", padding="5")
-        stats_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self.status_container = status_frame
-        self.values_container = values_frame
-        self.buttons_container = buttons_frame
-        self.stats_container = stats_frame
+        self.settings_frame = settings_frame
     
     def _initialize_components(self):
         from app.ui.bar_selector_ui import BarSelectorUI
@@ -158,76 +129,52 @@ class PristonTaleBot:
         )
         
         self.bot_controller = BotControllerUI(
-            self.control_frame,
+            self.settings_ui.control_container,
             self.root,
             self.bar_selector_ui.hp_bar_selector,
             self.bar_selector_ui.mp_bar_selector,
             self.bar_selector_ui.sp_bar_selector,
-            getattr(self.bar_selector_ui, 'largato_skill_selector', None),
+            self.bar_selector_ui.largato_skill_selector,
             self.settings_ui,
             self.log
         )
+        
+        logger.info("Components initialized")
     
     def log(self, message):
         timestamp = time.strftime("%H:%M:%S")
-        formatted_message = f"[{timestamp}] {message}\n"
-        
-        self.log_text.insert(tk.END, formatted_message)
+        self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
         self.log_text.see(tk.END)
-        
         logger.info(message)
-        
-        lines = self.log_text.get(1.0, tk.END).count('\n')
-        if lines > 1000:
-            self.log_text.delete(1.0, "201.0")
-    
-    def check_bar_config(self):
-        try:
-            configured = 0
-            
-            if hasattr(self.bar_selector_ui, 'get_configured_count'):
-                configured = self.bar_selector_ui.get_configured_count()
-            else:
-                if hasattr(self.bar_selector_ui, 'hp_bar_selector') and self.bar_selector_ui.hp_bar_selector.is_setup():
-                    configured += 1
-                if hasattr(self.bar_selector_ui, 'mp_bar_selector') and self.bar_selector_ui.mp_bar_selector.is_setup():
-                    configured += 1
-                if hasattr(self.bar_selector_ui, 'sp_bar_selector') and self.bar_selector_ui.sp_bar_selector.is_setup():
-                    configured += 1
-            
-            if configured >= 3:
-                if hasattr(self.bot_controller, 'enable_start_button'):
-                    self.bot_controller.enable_start_button()
-                if hasattr(self.bot_controller, 'set_status'):
-                    if configured == 4:
-                        self.bot_controller.set_status("Ready to start (All features available)")
-                        self.log("All bars configured! Regular bot and Largato Hunt are available.")
-                    else:
-                        self.bot_controller.set_status("Ready to start (Basic features)")
-                        self.log("Core bars configured! Basic bot functionality is available.")
-                logger.info("Bars configured, start button enabled")
-            else:
-                if hasattr(self.bot_controller, 'disable_start_button'):
-                    self.bot_controller.disable_start_button()
-                if hasattr(self.bot_controller, 'set_status'):
-                    self.bot_controller.set_status(f"Configure remaining bars ({configured}/3)")
-                
-            if configured < 3:
-                self.root.after(2000, self.check_bar_config)
-                
-        except Exception as e:
-            logger.error(f"Error checking bar configuration: {e}", exc_info=True)
-            self.root.after(5000, self.check_bar_config)
     
     def save_config(self):
-        try:
-            if hasattr(self, 'config_manager') and self.config_manager.save_bar_config():
-                self.log("Configuration saved successfully")
+        result = self.config_manager.save_bar_config()
+        if result:
+            self.log("Settings saved successfully")
+            self.check_bar_config()
+        else:
+            self.log("Failed to save settings")
+        return result
+    
+    def check_bar_config(self):
+        if hasattr(self.bar_selector_ui, 'get_configured_count'):
+            configured = self.bar_selector_ui.get_configured_count()
+            total = self.bar_selector_ui.get_total_count()
+            
+            if configured > 0:
+                self.bot_controller.set_status(f"{configured}/{total} bars configured")
+                
+            if configured >= 3:
+                self.bot_controller.enable_start_button()
+                if configured == 4:
+                    self.bot_controller.set_status("Ready to start (Largato Hunt available)")
+                    self.log("All bars configured! Regular bot and Largato Hunt are available.")
+                else:
+                    self.bot_controller.set_status("Ready to start (Largato Hunt requires skill bar)")
+                    self.log("Core bars configured! Configure Largato skill bar for hunt feature.")
             else:
-                self.log("Failed to save configuration")
-        except Exception as e:
-            self.log(f"Error saving configuration: {e}")
-            logger.error(f"Error saving configuration: {e}", exc_info=True)
+                self.bot_controller.disable_start_button()
+                self.bot_controller.set_status("Please configure all bars")
     
     def on_closing(self):
         try:
@@ -240,52 +187,7 @@ class PristonTaleBot:
             self.save_config()
             logger.info("Configuration saved on exit")
             
-            self.root.destroy()
-            
         except Exception as e:
             logger.error(f"Error on closing: {e}", exc_info=True)
-            try:
-                self.root.destroy()
-            except:
-                pass
-
-
-def main():
-    try:
-        from app.config import setup_logging
-        setup_logging()
-        
-        root = tk.Tk()
-        
-        try:
-            icon_path = "resources/potion_icon.ico"
-            if os.path.exists(icon_path):
-                root.iconbitmap(icon_path)
-        except Exception as e:
-            logger.debug(f"Could not set application icon: {e}")
-        
-        app = PristonTaleBot(root)
-        
-        root.update_idletasks()
-        root.minsize(root.winfo_reqwidth(), root.winfo_reqheight())
-        
-        root.mainloop()
-        
-    except Exception as e:
-        logger.critical(f"Fatal error during initialization: {e}", exc_info=True)
-        
-        try:
-            error_root = tk.Tk()
-            error_root.withdraw()
-            messagebox.showerror(
-                "Fatal Error", 
-                f"A fatal error occurred while starting the application:\n\n{e}\n\n"
-                "Please check the logs for details."
-            )
-            error_root.destroy()
-        except:
-            print(f"FATAL ERROR: {e}")
-
-
-if __name__ == "__main__":
-    main()
+        finally:
+            self.root.destroy()
