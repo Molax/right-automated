@@ -13,7 +13,7 @@ class BarSelectorUI:
         self.logger = logging.getLogger('PristonBot')
         
         try:
-            from app.bar_selector.screen_selector import ScreenSelector
+            from app.bar_selector import ScreenSelector
         except ImportError:
             try:
                 from app.bar_selector import ScreenSelector
