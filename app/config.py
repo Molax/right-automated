@@ -1,7 +1,7 @@
 """
 Configuration module for the Priston Tale Potion Bot
 ---------------------------------------------------
-This module handles configuration settings and logging setup.
+Fixed configuration without game window dependencies.
 """
 
 import os
@@ -23,11 +23,10 @@ DEFAULT_CONFIG = {
     },
     "scan_interval": 0.5,
     "potion_cooldown": 3.0,
-    "window_name": "Priston Tale",
     "debug_enabled": True,
     "spellcasting": {
         "enabled": False,
-        "spell_key": "F5",
+        "spell_key": "F2",
         "spell_interval": 3.0,
         "random_targeting": False,
         "target_radius": 100,
@@ -87,7 +86,7 @@ def setup_logging():
     log_file = os.path.join('logs', f'priston_bot_{time.strftime("%Y%m%d_%H%M%S")}.log')
     file_handler = RotatingFileHandler(
         log_file, 
-        maxBytes=5*1024*1024,  # 5MB
+        maxBytes=5*1024*1024,
         backupCount=5
     )
     file_handler.setLevel(logging.INFO)
@@ -157,6 +156,11 @@ def load_config():
                 if "game_window" in config["bars"]:
                     del config["bars"]["game_window"]
                     logging.getLogger('PristonBot').info("Removed deprecated game_window configuration")
+                    save_config(config)
+                
+                if "window_name" in config:
+                    del config["window_name"]
+                    logging.getLogger('PristonBot').info("Removed deprecated window_name configuration")
                     save_config(config)
                 
                 return config

@@ -1,7 +1,7 @@
 """
-Updated Main GUI for the Priston Tale Potion Bot
------------------------------------------------
-Removed game window selection, improved layout and functionality.
+Main GUI for the Priston Tale Potion Bot
+---------------------------------------
+Clean implementation without game window selection.
 """
 
 import os
@@ -74,11 +74,8 @@ class PristonTaleBot:
         right_column.grid_columnconfigure(0, weight=1)
         
         self._create_bar_selection_frame(left_column)
-        
         self._create_log_frame(left_column)
-        
         self._create_settings_and_control_frame(right_column)
-        
         self._initialize_components()
         
         self.log("Bot GUI initialized successfully")
@@ -146,7 +143,7 @@ class PristonTaleBot:
     
     def _initialize_components(self):
         from app.ui.bar_selector_ui import BarSelectorUI
-        from app.ui.bot_controller_ui import SettingsUI
+        from app.ui.settings_ui import SettingsUI
         from app.ui.bot_controller import BotControllerUI
         from app.ui.config_manager_ui import ConfigManagerUI
         

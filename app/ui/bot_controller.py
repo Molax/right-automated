@@ -1,7 +1,7 @@
 """
-Enhanced Bot Controller UI with integrated Largato Hunt
-------------------------------------------------------
-Includes skill bar detection and proper round-based logic.
+Fixed Bot Controller UI with proper bot functionality
+--------------------------------------------------
+Includes proper potion management and spellcasting.
 """
 
 import tkinter as tk
@@ -226,13 +226,6 @@ class BotControllerUI:
         self.target_var = tk.StringVar(value="(0, 0)")
         ttk.Label(target_frame, textvariable=self.target_var).pack(side=tk.LEFT)
         
-        window_frame = ttk.Frame(values_left)
-        window_frame.pack(fill=tk.X, pady=2)
-        
-        ttk.Label(window_frame, text="Game Window:", width=10).pack(side=tk.LEFT)
-        self.window_var = tk.StringVar(value="Not Detected")
-        ttk.Label(window_frame, textvariable=self.window_var).pack(side=tk.LEFT)
-        
         largato_status_frame = ttk.Frame(values_right)
         largato_status_frame.pack(fill=tk.X, pady=2)
         
@@ -365,12 +358,6 @@ class BotControllerUI:
         logger.info(f"Skill bar configuration check result: {skill_bar_configured}")
         
         if not skill_bar_configured:
-            if self.largato_skill_bar:
-                logger.info(f"Largato skill bar type: {type(self.largato_skill_bar)}")
-                logger.info(f"Largato skill bar attributes: {dir(self.largato_skill_bar)}")
-                if hasattr(self.largato_skill_bar, 'x1'):
-                    logger.info(f"Largato skill bar coordinates: ({self.largato_skill_bar.x1}, {self.largato_skill_bar.y1}) to ({self.largato_skill_bar.x2}, {self.largato_skill_bar.y2})")
-            
             messagebox.showerror(
                 "Largato Skill Bar Not Configured",
                 "Please configure the Largato skill bar first.\n\n"
@@ -597,30 +584,6 @@ class BotControllerUI:
         
         logger.debug(f"Generated new random offset: ({x_offset}, {y_offset})")
         return x_offset, y_offset
-        
-    def _find_and_setup_game_window(self):
-        try:
-            config = load_config()
-            window_config = config.get("bars", {}).get("game_window", {})
-            
-            if window_config.get("configured", False):
-                if all(window_config.get(key) is not None for key in ["x1", "y1", "x2", "y2"]):
-                    x1 = window_config["x1"]
-                    y1 = window_config["y1"]
-                    x2 = window_config["x2"]
-                    y2 = window_config["y2"]
-                    
-                    self.game_window_rect = (x1, y1, x2, y2)
-                    self.log_callback(f"Game window found in configuration: ({x1},{y1})-({x2},{y2})")
-                    self.window_var.set(f"Config: {x2-x1}x{y2-y1}")
-                    logger.info(f"Game window loaded from config: ({x1},{y1})-({x2},{y2})")
-                    return True
-        except Exception as e:
-            logger.error(f"Error loading game window from config: {e}")
-        
-        self.log_callback("WARNING: Game window could not be detected")
-        logger.warning("Failed to find game window through any method")
-        return False
     
     def bot_loop(self):
         last_hp_potion = 0
@@ -632,11 +595,6 @@ class BotControllerUI:
         
         self.log_callback("Bot started")
         logger.info("Bot loop started")
-        
-        game_window_found = self._find_and_setup_game_window()
-        
-        if not game_window_found:
-            self.log_callback("WARNING: Game window not detected. Some functionality may not work properly.")
         
         while self.running:
             try:
@@ -723,6 +681,7 @@ class BotControllerUI:
                     if current_time - last_spell_cast > spell_interval:
                         spell_key = settings["spellcasting"]["spell_key"]
                         
+                        logger.info(f"Casting spell: {spell_key}")
                         press_key(None, spell_key)
                         
                         time.sleep(0.1)
