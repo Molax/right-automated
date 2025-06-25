@@ -9,12 +9,12 @@ from app.ui.modern_controls import ModernControls
 logger = logging.getLogger('PristonBot')
 main_app = None
 
-class ModernPristonTaleBot:
+class PristonTaleBot:
     def __init__(self, root):
         global main_app
         main_app = self
         
-        logger.info("Initializing Modern Priston Tale Bot")
+        logger.info("Initializing Priston Tale Bot")
         self.root = root
         
         try:
@@ -39,7 +39,7 @@ class ModernPristonTaleBot:
         
         self._initialize_components()
         
-        self.log("Modern bot interface initialized")
+        self.log("Bot interface initialized")
         
         if hasattr(self, 'config_manager'):
             try:
@@ -56,7 +56,7 @@ class ModernPristonTaleBot:
         self.check_bar_config()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        logger.info("Modern Bot GUI initialized successfully")
+        logger.info("Bot GUI initialized successfully")
     
     def _initialize_screen_selectors(self):
         """Initialize the actual ScreenSelector instances"""
@@ -259,5 +259,5 @@ class ModernPristonTaleBot:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = ModernPristonTaleBot(root)
+    app = PristonTaleBot(root)
     root.mainloop()
